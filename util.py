@@ -32,7 +32,7 @@ def parse_dataset(input_file, word_id=0, word_to_id={}):
                 article_no += 1
             if '\t' in line:
                 question_parts = line.split('\t')
-                tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0]).split()
+                tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0].strip()).split()
                 for token in tokens[1:]:
                     if token not in word_to_id:
                         word_to_id[token] = word_id

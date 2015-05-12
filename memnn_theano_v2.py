@@ -1,7 +1,7 @@
 import numpy as np
 import theano
 import theano.tensor as T
-import sys, random
+import sys, random, pprint
 
 from util import *
 
@@ -230,6 +230,7 @@ class MemNN:
     def predict(self, dataset, questions, num_words):
         correct_answers = 0
         wrong_answers = 0
+        fake_correct_answers = 0
         for i, question in enumerate(questions):
             article_no = question[0]
             line_no = question[1]
@@ -256,6 +257,12 @@ class MemNN:
                 index_m1, m1 = self.find_m0(phi_x + phi_m0, statements, line_no, ignore=index_m0)
                 phi_m1[2*num_words:3*num_words] = m1
 
+                c1 = int(question[4].split(' ')[0])
+                c2 = int(question[4].split(' ')[1])
+                if index_m0 == c1 or index_m0 == c2 or index_m1 == c1 or index_m1 == c2:
+                    fake_correct_answers += 1
+
+
             predicted, _ = self.find_word(phi_x + phi_m0 + phi_m1, num_words)
 
             #print "predicted: %s, correct: %s" % (self.id_to_word[predicted], self.id_to_word[correct])
@@ -264,7 +271,7 @@ class MemNN:
             else:
                 wrong_answers += 1
 
-        print '%d correct, %d wrong' % (correct_answers, wrong_answers)
+        print '%d correct, %d wrong, %d fake_correct' % (correct_answers, wrong_answers, fake_correct_answers)
 
 if __name__ == "__main__":
     training_dataset = sys.argv[1]
@@ -273,7 +280,7 @@ if __name__ == "__main__":
     dataset, questions, word_to_id, num_words = parse_dataset(training_dataset)
     dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), questions)
-    memNN = MemNN(n_words=num_words, n_embedding=20, lr=0.01, n_epochs=100, margin=5.0, word_to_id=word_to_id)
+    memNN = MemNN(n_words=num_words, n_embedding=20, lr=0.01, n_epochs=100, margin=1.0, word_to_id=word_to_id)
     memNN.train(dataset_bow, questions_bow, num_words)
 
     test_dataset, test_questions, _, _ = parse_dataset(test_dataset, word_id=num_words, word_to_id=word_to_id)
