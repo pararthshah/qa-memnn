@@ -14,11 +14,9 @@ def init_shared_zeros(*shape):
     '''Initialize a vector shared variable with zero elements.'''
     return theano.shared(np.zeros(shape, dtype=dtype))
 
-def parse_dataset(input_file):
+def parse_dataset(input_file, word_id=0, word_to_id={}):
     dataset = []
     questions = []
-    word_to_id = {}
-    word_id = 0
     with open(input_file) as f:
         statements = []
         article_no = 0
@@ -36,7 +34,7 @@ def parse_dataset(input_file):
                 question_parts = line.split('\t')
                 tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0]).split()
                 for token in tokens[1:]:
-                    if not token in word_to_id:
+                    if token not in word_to_id:
                         word_to_id[token] = word_id
                         word_id += 1
 
@@ -51,12 +49,12 @@ def parse_dataset(input_file):
                 else:
                     lines = stmt_to_line[question_parts[2]]
 
-                questions.append([article_no, line_no, ' '.join(tokens[1:]), question_parts[1], lines])
+                questions.append([article_no, line_no, ' '.join(tokens[1:]), word_to_id[question_parts[1]], lines])
             else:
                 tokens = re.sub(r'([\.\?])$', r' \1', line).split()
                 stmt_to_line[tokens[0]] = line_no
                 for token in tokens[1:]:
-                    if not token in word_to_id:
+                    if token not in word_to_id:
                         word_to_id[token] = word_id
                         word_id += 1
                 statements.append(' '.join(tokens[1:]))
