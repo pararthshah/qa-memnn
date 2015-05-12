@@ -209,7 +209,7 @@ if __name__ == "__main__":
     dataset, questions, word_to_id, num_words = parse_dataset(training_dataset)
     dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), questions)
-    memNN = MemNN(n_words=num_words, n_embedding=50, lr=0.01, n_epochs=20, margin=1.0)
+    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=20, margin=1.0)
     memNN.train(dataset_bow, questions_bow, num_words)
 
     test_dataset, test_questions, _, _ = parse_dataset(test_dataset)
