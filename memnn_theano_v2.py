@@ -65,23 +65,23 @@ class MemNN:
 
     def find_m0(self, phi_x, statements, line_no, ignore=None):
         max_score = float("-inf")
+        index_m0 = None
         m0 = None
-        phi_m0 = None
         for i in xrange(line_no):
             if ignore and i == ignore:
                 continue
 
             s = statements[i]
             phi_s = np.zeros((self.n_D,))
-            phi_s[2*num_words:3*num_words] = s
+            phi_s[num_words:2*num_words] = s
 
             score = self.predict_function(phi_x, phi_s)
             if score > max_score:
                 max_score = score
-                m0 = i
-                phi_m0 = phi_s
+                index_m0 = i
+                m0 = s
 
-        return m0, phi_m0
+        return index_m0, m0
 
     def train(self, dataset_bow, questions, num_words):
         for epoch in xrange(self.n_epochs):
@@ -105,7 +105,8 @@ class MemNN:
                 del seq[correct_stmt1]
                 false_stmt1 = random.choice(seq)
 
-                del seq[correct_stmt2 if (correct_stmt1 > correct_stmt2) else (correct_stmt2 - 1)]
+                seq = [i for i in range(line_no)]
+                del seq[correct_stmt2]
                 false_stmt2 = random.choice(seq)
 
                 # The question
@@ -121,7 +122,9 @@ class MemNN:
                 phi_f1bar[num_words:2*num_words] = dataset_bow[article_no][false_stmt1]
 
                 # Find m0
-                index_m0, phi_m0 = self.find_m0(phi_x, dataset_bow[article_no], line_no)
+                index_m0, m0 = self.find_m0(phi_x, dataset_bow[article_no], line_no)
+                phi_m0 = np.zeros((self.n_D,))
+                phi_m0[2*num_words:3*num_words] = m0
 
                 # Correct statement 2
                 phi_f2 = np.zeros((self.n_D,))
@@ -180,7 +183,9 @@ class MemNN:
                 index_m0 = len(statements) - 1
                 index_m1 = len(statements) - 1
             else:
-                index_m0, phi_m0 = self.find_m0(phi_x, statements, line_no)
+                index_m0, m0 = self.find_m0(phi_x, statements, line_no)
+                phi_m0 = np.zeros((self.n_D,))
+                phi_m0[2*num_words:3*num_words] = m0
                 index_m1, _ = self.find_m0(phi_x + phi_m0, statements, line_no, ignore=index_m0)
 
             #answer = str(index_m0) + ' ' + str(index_m1)
@@ -204,7 +209,7 @@ if __name__ == "__main__":
     dataset, questions, word_to_id, num_words = parse_dataset(training_dataset)
     dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), questions)
-    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=10, margin=1.0)
+    memNN = MemNN(n_words=num_words, n_embedding=50, lr=0.01, n_epochs=20, margin=1.0)
     memNN.train(dataset_bow, questions_bow, num_words)
 
     test_dataset, test_questions, _, _ = parse_dataset(test_dataset)
