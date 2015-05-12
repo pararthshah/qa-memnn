@@ -61,7 +61,6 @@ class MemNN:
             T.maximum(0, self.margin - correct_score2 + false_score2)
         )
 
-        print theano.pp(cost)
         return cost
 
     def find_m0(self, phi_x, statements, line_no, ignore=None):
@@ -104,8 +103,9 @@ class MemNN:
                 # False statement
                 seq = [i for i in range(line_no)]
                 del seq[correct_stmt1]
-                del seq[correct_stmt2 if (correct_stmt1 > correct_stmt2) else (correct_stmt2 - 1)]
                 false_stmt1 = random.choice(seq)
+
+                del seq[correct_stmt2 if (correct_stmt1 > correct_stmt2) else (correct_stmt2 - 1)]
                 false_stmt2 = random.choice(seq)
 
                 # The question
@@ -132,23 +132,27 @@ class MemNN:
                 phi_f2bar[num_words:2*num_words] = dataset_bow[article_no][false_stmt2]
 
                 if article_no == 1 and line_no == 12:
-                    print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f" % (
+                    index_m1, _ = self.find_m0(phi_x + phi_m0, dataset_bow[article_no], line_no, ignore=index_m0)
+                    print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d" % (
                         self.predict_function(phi_x, phi_f1),
                         self.predict_function(phi_x, phi_f1bar),
                         self.predict_function(phi_x + phi_m0, phi_f2),
                         self.predict_function(phi_x + phi_m0, phi_f2bar),
+                        index_m0, index_m1
                     )
-                    print "[BEFORE] m0: %d" % index_m0
 
                 cost = self.train_function(phi_x, phi_f1, phi_f1bar, phi_f2, phi_f2bar, phi_m0)
                 costs.append(cost)
 
                 if article_no == 1 and line_no == 12:
-                    print "[AFTER] %.3f\t%.3f\t%.3f\t%.3f" % (
+                    index_m0, _ = self.find_m0(phi_x, dataset_bow[article_no], line_no)
+                    index_m1, _ = self.find_m0(phi_x + phi_m0, dataset_bow[article_no], line_no, ignore=index_m0)
+                    print "[ AFTER] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d" % (
                         self.predict_function(phi_x, phi_f1),
                         self.predict_function(phi_x, phi_f1bar),
                         self.predict_function(phi_x + phi_m0, phi_f2),
                         self.predict_function(phi_x + phi_m0, phi_f2bar),
+                        index_m0, index_m1
                     )
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
@@ -200,7 +204,7 @@ if __name__ == "__main__":
     dataset, questions, word_to_id, num_words = parse_dataset(training_dataset)
     dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), questions)
-    memNN = MemNN(n_words=num_words, n_embedding=20, lr=0.01, n_epochs=10, margin=1.0)
+    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=10, margin=1.0)
     memNN.train(dataset_bow, questions_bow, num_words)
 
     test_dataset, test_questions, _, _ = parse_dataset(test_dataset)
