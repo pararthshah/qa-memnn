@@ -1,19 +1,14 @@
 import numpy as np
-import theano
-import theano.tensor as T
 import sys, re, random
-
-dtype=theano.config.floatX
 
 def init_shared_normal(num_rows, num_cols, scale=1):
     '''Initialize a matrix shared variable with normally distributed
     elements.'''
-    return theano.shared(np.random.normal(
-        scale=scale, size=(num_rows, num_cols)).astype(dtype))
+    return np.random.normal(scale=scale, size=(num_rows, num_cols))
 
 def init_shared_zeros(*shape):
     '''Initialize a vector shared variable with zero elements.'''
-    return theano.shared(np.zeros(shape, dtype=dtype))
+    return np.zeros(shape, dtype=dtype)
 
 class MemNN:
     def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100):
@@ -24,38 +19,23 @@ class MemNN:
         self.n_words = n_words
         self.n_D = 2 * self.n_words
 
-        phi_x = T.vector('phi_x')
-        phi_f1 = T.vector('phi_f1')
-        phi_f1bar = T.vector('phi_f1bar')
-        phi_f = T.vector('phi_f')
-        
         self.U_O = init_shared_normal(n_embedding, self.n_D, 0.01)
-        cost = self.calc_cost(phi_x, phi_f1, phi_f1bar)
-        params = [self.U_O]
-        gradient = T.grad(cost, params)
-
-        updates=[]
-        for param, gparam in zip(params, gradient):
-            updates.append((param, param - gparam * self.lr))
-
-        self.train_function = theano.function(inputs = [phi_x, phi_f1, phi_f1bar],
-                                         outputs = cost,
-                                         updates = updates)
-
-        score = self.calc_score(phi_x, phi_f)
-        self.predict_function = theano.function(inputs = [phi_x, phi_f], outputs = score)
 
     def calc_score(self, phi_x, phi_y):
-        #return T.dot(T.dot(phi_x.T, self.U_O.T), T.dot(self.U_O, phi_y))
-        return T.dot(self.U_O.dot(phi_x), self.U_O.dot(phi_y))
+        return phi_x.T.dot(self.U_O.T).dot(self.U_O).dot(phi_y)
 
-    def calc_cost(self, phi_x, phi_f1, phi_f1bar):
+    def calc_grad_S_O_U_O(self, phi_x, phi_y):
+        return self.U_O.dot(np.outer(phi_x, phi_y) + np.outer(phi_y, phi_x))
+
+    def calc_cost_and_grad(self, phi_x, phi_f1, phi_f1bar):
         correct_score = self.calc_score(phi_x, phi_f1)
         false_score = self.calc_score(phi_x, phi_f1bar)
-        print correct_score.type
-        cost = T.maximum(0, self.margin - correct_score + false_score)
-        print theano.pp(cost)
-        return cost
+        cost = max(0, self.margin - correct_score + false_score)
+        grad = {}
+        grad['U_O'] = 0
+        if cost > 0:
+            grad['U_O'] = -1*self.calc_grad_S_O_U_O(phi_x, phi_f1) + self.calc_grad_S_O_U_O(phi_x, phi_f1bar)
+        return cost, grad
 
     def train(self, dataset_bow, questions, num_words):
         for epoch in xrange(self.n_epochs):
@@ -78,24 +58,25 @@ class MemNN:
                 phi_f1bar = np.zeros((self.n_D,))
                 phi_f1bar[num_words:2*num_words] = dataset_bow[article_no][false_stmt]
 
-                if article_no == 0 and line_no == 2:
-                    corr_score = self.predict_function(phi_x, phi_f1)
-                    fals_score = self.predict_function(phi_x, phi_f1bar)
-                    print "[BEFORE] corr score: %f, false score: %f" % (corr_score, fals_score)
+                # if article_no == 0 and line_no == 2:
+                #     corr_score = self.calc_score(phi_x, phi_f1)
+                #     fals_score = self.calc_score(phi_x, phi_f1bar)
+                #     print "[BEFORE] corr score: %f, false score: %f" % (corr_score, fals_score)
 
-                cost = self.train_function(phi_x, phi_f1, phi_f1bar)
+                cost, grad = self.calc_cost_and_grad(phi_x, phi_f1, phi_f1bar)
                 costs.append(cost)
+                self.U_O -= self.lr * grad['U_O']
 
-                if article_no == 0 and line_no == 2:
-                    corr_score = self.predict_function(phi_x, phi_f1)
-                    fals_score = self.predict_function(phi_x, phi_f1bar)
-                    print "[ AFTER] corr score: %f, false score: %f" % (corr_score, fals_score)
+                # if article_no == 0 and line_no == 2:
+                #     corr_score = self.calc_score(phi_x, phi_f1)
+                #     fals_score = self.calc_score(phi_x, phi_f1bar)
+                #     print "[ AFTER] corr score: %f, false score: %f" % (corr_score, fals_score)
 
-            if epoch % 100 == 0:
+            # if epoch % 100 == 0:
                 # print 'Epoch %i/%i' % (epoch + 1, self.n_epochs), np.mean(costs)
-                sys.stdout.flush()
+                # sys.stdout.flush()
 
-            # print np.mean(costs), np.mean(self.U_O.get_value()), np.max(self.U_O.get_value()), np.min(self.U_O.get_value())
+            # print np.mean(costs), np.mean(self.U_O), np.max(self.U_O), np.min(self.U_O)
 
     def predict(self, dataset, questions):
         correct_answers = 0
@@ -111,15 +92,18 @@ class MemNN:
             
             answer = -1
             max_score = -99999
-            for i in range(line_no):
+            for l in range(line_no):
                 phi_f = np.zeros((self.n_D,))
-                phi_f[num_words:2*num_words] = dataset[article_no][i]
+                phi_f[num_words:2*num_words] = dataset[article_no][l]
                 
                 #print phi_x, phi_f
-                score = self.predict_function(phi_x, phi_f)
+                score = self.calc_score(phi_x, phi_f)
                 if answer == -1 or score > max_score:
                     max_score = score
-                    answer = i
+                    answer = l
+
+            if article_no == 0:
+                print "%d: corr stmt: %d, answer: %d" % (i, correct_stmt, answer)
 
             if answer == correct_stmt:
                 correct_answers += 1
