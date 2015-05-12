@@ -140,7 +140,7 @@ class MemNN:
                 costs.append(cost)
 
                 if article_no == 1 and line_no == 10:
-                    print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f" % (
+                    print "[AFTER] %.3f\t%.3f\t%.3f\t%.3f" % (
                         self.predict_function(phi_x, phi_f1),
                         self.predict_function(phi_x, phi_f1bar),
                         self.predict_function(phi_x + phi_m0, phi_f2),
