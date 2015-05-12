@@ -128,20 +128,24 @@ class MemNN:
                 phi_f2bar = np.zeros((self.n_D,))
                 phi_f2bar[num_words:2*num_words] = dataset_bow[article_no][false_stmt2]
 
-                #flag = False
-                #if random.random() > 0.999:
-                #    flag = True
-                #    corr_score = self.predict_function(phi_x, phi_f1)
-                #    fals_score = self.predict_function(phi_x, phi_f1bar)
-                #    print "[BEFORE] corr score: %f, false score: %f" % (corr_score, fals_score)
+                if article_no == 1 and line_no == 10:
+                    print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f" % (
+                        self.predict_function(phi_x, phi_f1),
+                        self.predict_function(phi_x, phi_f1bar),
+                        self.predict_function(phi_x + phi_m0, phi_f2),
+                        self.predict_function(phi_x + phi_m0, phi_f2bar),
+                    )
 
                 cost = self.train_function(phi_x, phi_f1, phi_f1bar, phi_f2, phi_f2bar, phi_m0)
                 costs.append(cost)
 
-                #if flag:
-                #    corr_score = self.predict_function(phi_x, phi_f1)
-                #    fals_score = self.predict_function(phi_x, phi_f1bar)
-                #    print "[AFTER] corr score: %f, false score: %f" % (corr_score, fals_score)
+                if article_no == 1 and line_no == 10:
+                    print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f" % (
+                        self.predict_function(phi_x, phi_f1),
+                        self.predict_function(phi_x, phi_f1bar),
+                        self.predict_function(phi_x + phi_m0, phi_f2),
+                        self.predict_function(phi_x + phi_m0, phi_f2bar),
+                    )
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
 
@@ -189,7 +193,7 @@ if __name__ == "__main__":
     dataset, questions, word_to_id, num_words = parse_dataset(training_dataset)
     dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), questions)
-    memNN = MemNN(n_words=num_words, n_epochs=10, margin=1.0)
+    memNN = MemNN(n_words=num_words, n_embedding=20, lr=0.01, n_epochs=10, margin=1.0)
     memNN.train(dataset_bow, questions_bow, num_words)
 
     test_dataset, test_questions, _, _ = parse_dataset(test_dataset)
