@@ -13,38 +13,65 @@ class MemNN:
         self.n_epochs = n_epochs
         self.n_words = n_words
         self.n_D = 2 * self.n_words
+        self.n_embedding = n_embedding
 
         phi_x = T.vector('phi_x')
         phi_f1 = T.vector('phi_f1')
         phi_f1bar = T.vector('phi_f1bar')
-        phi_f = T.vector('phi_f')
 
-        self.U_O = init_shared_normal(n_embedding, self.n_D, 0.01)
-        cost = self.calc_cost(phi_x, phi_f1, phi_f1bar)
-        params = [self.U_O]
+        # Supporting memories
+        phi_m0 = T.vector('phi_m0')
+
+        # True word
+        phi_r = T.vector('phi_r')
+
+        # False words
+        phi_rbar = T.vector('phi_rbar')
+
+        self.U_O = init_shared_normal(self.n_embedding, self.n_D, 0.01)
+        self.U_R = init_shared_normal(self.n_embedding, self.n_D, 0.01)
+
+        cost = self.calc_cost(phi_x, phi_f1, phi_f1bar, phi_m0, phi_r, phi_rbar)
+        params = [self.U_O, self.U_R]
         gradient = T.grad(cost, params)
 
         updates=[]
         for param, gparam in zip(params, gradient):
             updates.append((param, param - gparam * self.lr))
 
-        self.train_function = theano.function(inputs = [phi_x, phi_f1, phi_f1bar],
+        self.train_function = theano.function(inputs = [phi_x, phi_f1, phi_f1bar, phi_m0, phi_r, phi_rbar],
                                          outputs = cost,
                                          updates = updates)
 
-        score = self.calc_score(phi_x, phi_f)
-        self.predict_function = theano.function(inputs = [phi_x, phi_f], outputs = score)
+        phi_f = T.vector('phi_f')
 
-    def calc_score(self, phi_x, phi_y):
+        score_o = self.calc_score_o(phi_x, phi_f)
+        self.predict_function_o = theano.function(inputs = [phi_x, phi_f], outputs = score_o)
+
+        score_r = self.calc_score_r(phi_x, phi_f)
+        self.predict_function_r = theano.function(inputs = [phi_x, phi_f], outputs = score_r)
+
+    def calc_score(self, phi_x, phi_y, U):
         #return T.dot(T.dot(phi_x.T, self.U_O.T), T.dot(self.U_O, phi_y))
-        return T.dot(self.U_O.dot(phi_x), self.U_O.dot(phi_y))
+        return T.dot(U.dot(phi_x), U.dot(phi_y))
 
-    def calc_cost(self, phi_x, phi_f1, phi_f1bar):
-        correct_score = self.calc_score(phi_x, phi_f1)
-        false_score = self.calc_score(phi_x, phi_f1bar)
-        print correct_score.type
-        cost = T.maximum(0, self.margin - correct_score + false_score)
-        print theano.pp(cost)
+    def calc_score_o(self, phi_x, phi_y):
+        return self.calc_score(phi_x, phi_y, self.U_O)
+
+    def calc_score_r(self, phi_x, phi_y):
+        return self.calc_score(phi_x, phi_y, self.U_R)
+
+    def calc_cost(self, phi_x, phi_f1, phi_f1bar, phi_m0, phi_r, phi_rbar):
+        correct_score1 = self.calc_score_o(phi_x, phi_f1)
+        false_score1 = self.calc_score_o(phi_x, phi_f1bar)
+
+        correct_score2 = self.calc_score_r(phi_x + phi_m0, phi_r)
+        false_score2 = self.calc_score_r(phi_x + phi_m0, phi_rbar)
+
+        cost = (
+            T.maximum(0, self.margin - correct_score1 + false_score1) +
+            T.maximum(0, self.margin - correct_score2 + false_score2)
+        )
         return cost
 
     def train(self, dataset_bow, questions, num_words):
@@ -123,14 +150,8 @@ if __name__ == "__main__":
     test_dataset = training_dataset.replace('train', 'test')
 
     dataset, questions, word_to_id, num_words = parse_dataset(training_dataset)
-    dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), dataset)
-    questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), questions)
-    # print dataset[0], dataset_bow[0], questions_bow[0]
-    #print len(dataset_bow)
-    memNN = MemNN(n_words=num_words, n_epochs=100, margin=1.0)
-    memNN.train(dataset_bow, questions_bow, num_words)
+    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=10, margin=1.0, word_to_id=word_to_id)
+    memNN.train(dataset, questions)
 
-    test_dataset, test_questions, _, _ = parse_dataset(test_dataset)
-    test_dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), test_dataset)
-    test_questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), test_questions)
-    memNN.predict(test_dataset_bow, test_questions_bow)
+    test_dataset, test_questions, _, _ = parse_dataset(test_dataset, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    memNN.predict(test_dataset, test_questions)
