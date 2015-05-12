@@ -64,11 +64,14 @@ class MemNN:
         print theano.pp(cost)
         return cost
 
-    def find_m0(self, phi_x, statements):
+    def find_m0(self, phi_x, statements, line_no, ignore=None):
         max_score = float("-inf")
         m0 = None
         phi_m0 = None
-        for i in xrange(len(statements)):
+        for i in xrange(line_no):
+            if ignore and i == ignore:
+                continue
+
             s = statements[i]
             phi_s = np.zeros((self.n_D,))
             phi_s[2*num_words:3*num_words] = s
@@ -118,7 +121,7 @@ class MemNN:
                 phi_f1bar[num_words:2*num_words] = dataset_bow[article_no][false_stmt1]
 
                 # Find m0
-                _, phi_m0 = self.find_m0(phi_x, dataset_bow[article_no])
+                index_m0, phi_m0 = self.find_m0(phi_x, dataset_bow[article_no], line_no)
 
                 # Correct statement 2
                 phi_f2 = np.zeros((self.n_D,))
@@ -128,18 +131,19 @@ class MemNN:
                 phi_f2bar = np.zeros((self.n_D,))
                 phi_f2bar[num_words:2*num_words] = dataset_bow[article_no][false_stmt2]
 
-                if article_no == 1 and line_no == 10:
+                if article_no == 1 and line_no == 12:
                     print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f" % (
                         self.predict_function(phi_x, phi_f1),
                         self.predict_function(phi_x, phi_f1bar),
                         self.predict_function(phi_x + phi_m0, phi_f2),
                         self.predict_function(phi_x + phi_m0, phi_f2bar),
                     )
+                    print "[BEFORE] m0: %d" % index_m0
 
                 cost = self.train_function(phi_x, phi_f1, phi_f1bar, phi_f2, phi_f2bar, phi_m0)
                 costs.append(cost)
 
-                if article_no == 1 and line_no == 10:
+                if article_no == 1 and line_no == 12:
                     print "[AFTER] %.3f\t%.3f\t%.3f\t%.3f" % (
                         self.predict_function(phi_x, phi_f1),
                         self.predict_function(phi_x, phi_f1bar),
@@ -166,11 +170,14 @@ class MemNN:
 
             statements = dataset[article_no]
 
-            index_m0, phi_m0 = self.find_m0(phi_x, statements)
-
-            del statements[index_m0]
-
-            index_m1, _ = self.find_m0(phi_x + phi_m0, statements)
+            index_m0 = None
+            index_m1 = None
+            if len(statements) <= 1:
+                index_m0 = len(statements) - 1
+                index_m1 = len(statements) - 1
+            else:
+                index_m0, phi_m0 = self.find_m0(phi_x, statements, line_no)
+                index_m1, _ = self.find_m0(phi_x + phi_m0, statements, line_no, ignore=index_m0)
 
             #answer = str(index_m0) + ' ' + str(index_m1)
             #if answer == correct_stmt:
