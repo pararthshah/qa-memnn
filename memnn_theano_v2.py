@@ -136,8 +136,9 @@ class MemNN:
                         f = random.randint(0, num-1)
                     return f
 
+                false_word = neg_sample(correct_word, num_words)
                 phi_rbar = np.zeros((self.n_D,))
-                phi_rbar[num_words + neg_sample(correct_word, num_words)] = 1.0
+                phi_rbar[num_words + false_word] = 1.0
 
                 # False statement
                 false_stmt1 = neg_sample(correct_stmt1, line_no)
@@ -173,49 +174,58 @@ class MemNN:
                 phi_m1 = np.zeros((self.n_D,))
                 phi_m1[2*num_words:3*num_words] = m1
 
-                """
                 if article_no == 1 and line_no == 12:
-                    print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d" % (
+                    print '[SAMPLE] %s\t%s' % (self.id_to_word[correct_word], self.id_to_word[false_word])
+                    w, score = self.find_word(phi_x + phi_m0 + phi_m1, num_words, verbose=False)
+                    print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d\ta:%s\ts:%.3f\tc:%s" % (
                         self.predict_function_o(phi_x, phi_f1),
                         self.predict_function_o(phi_x, phi_f1bar),
                         self.predict_function_o(phi_x + phi_m0, phi_f2),
                         self.predict_function_o(phi_x + phi_m0, phi_f2bar),
-                        index_m0, index_m1
+                        index_m0, index_m1,
+                        self.id_to_word[w], score, self.id_to_word[correct_word]
                     )
-                """
 
                 cost = self.train_function(phi_x, phi_f1, phi_f1bar, phi_f2, phi_f2bar, phi_m0, phi_f1, phi_r, phi_rbar)
                 costs.append(cost)
 
-                """
                 if article_no == 1 and line_no == 12:
                     index_m0, m0 = self.find_m0(phi_x, dataset_bow[article_no], line_no)
                     phi_m0 = np.zeros((self.n_D,))
                     phi_m0[2*num_words:3*num_words] = m0
-                    index_m1, _ = self.find_m0(phi_x + phi_m0, dataset_bow[article_no], line_no, ignore=index_m0)
-                    print "[ AFTER] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d" % (
+                    index_m1, m1 = self.find_m0(phi_x + phi_m0, dataset_bow[article_no], line_no, ignore=index_m0)
+                    phi_m1 = np.zeros((self.n_D,))
+                    phi_m1[2*num_words:3*num_words] = m1
+                    w, score = self.find_word(phi_x + phi_m0 + phi_m1, num_words, verbose=False)
+                    print "[ AFTER] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d\ta:%s\ts:%.3f\tc:%s" % (
                         self.predict_function_o(phi_x, phi_f1),
                         self.predict_function_o(phi_x, phi_f1bar),
                         self.predict_function_o(phi_x + phi_m0, phi_f2),
                         self.predict_function_o(phi_x + phi_m0, phi_f2bar),
-                        index_m0, index_m1
+                        index_m0, index_m1,
+                        self.id_to_word[w], score, self.id_to_word[correct_word]
                     )
-                """
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
 
-    def find_word(self, phi_x, num_words):
+    def find_word(self, phi_x, num_words, verbose=False):
         max_score = float("-inf")
         best_word = -1
         for i in xrange(num_words):
             phi_r = np.zeros((self.n_D,))
             phi_r[num_words + i] = 1
             score = self.predict_function_r(phi_x, phi_r)
+            if verbose:
+                print '[  FIND] w:%s\ts:%.3f' % (
+                    self.id_to_word[i],
+                    score
+                )
             if score > max_score:
                 max_score = score
                 best_word = i
 
-        return best_word
+        assert(best_word >= 0)
+        return best_word, score
 
     def predict(self, dataset, questions, num_words):
         correct_answers = 0
@@ -237,6 +247,7 @@ class MemNN:
                 print "Stupid question"
                 continue
             elif len(statements) == 1:
+                print "Stupid question?"
                 phi_m0[2*num_words:3*num_words] = statements[0]
                 phi_m1[2*num_words:3*num_words] = statements[0]
             else:
@@ -245,7 +256,7 @@ class MemNN:
                 index_m1, m1 = self.find_m0(phi_x + phi_m0, statements, line_no, ignore=index_m0)
                 phi_m1[2*num_words:3*num_words] = m1
 
-            predicted = self.find_word(phi_x + phi_m0 + phi_m1, num_words)
+            predicted, _ = self.find_word(phi_x + phi_m0 + phi_m1, num_words)
 
             #print "predicted: %s, correct: %s" % (self.id_to_word[predicted], self.id_to_word[correct])
             if predicted == correct:
@@ -262,7 +273,7 @@ if __name__ == "__main__":
     dataset, questions, word_to_id, num_words = parse_dataset(training_dataset)
     dataset_bow = map(lambda y: map(lambda x: compute_phi(x, word_to_id, num_words), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, num_words), questions)
-    memNN = MemNN(n_words=num_words, n_embedding=50, lr=0.01, n_epochs=50, margin=0.1, word_to_id=word_to_id)
+    memNN = MemNN(n_words=num_words, n_embedding=20, lr=0.01, n_epochs=100, margin=5.0, word_to_id=word_to_id)
     memNN.train(dataset_bow, questions_bow, num_words)
 
     test_dataset, test_questions, _, _ = parse_dataset(test_dataset, word_id=num_words, word_to_id=word_to_id)
