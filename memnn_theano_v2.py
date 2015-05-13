@@ -278,9 +278,9 @@ class MemNN:
                 if index_m0 == c1 or index_m0 == c2 or index_m1 == c1 or index_m1 == c2:
                     fake_correct_answers += 1
 
-            if article_no == 1:
+            if article_no <= 2:
                 predicted, _ = self.find_word(phi_x + phi_m0 + phi_m1, verbose=False)
-                print "%d, %d: predicted: %s, correct: %s" % (i, line_no, self.id_to_word[predicted], self.id_to_word[correct])
+                print "%d, %d, %d: predicted: %s, correct: %s" % (i, article_no, line_no, self.id_to_word[predicted], self.id_to_word[correct])
             else:
                 predicted, _ = self.find_word(phi_x + phi_m0 + phi_m1)
             if predicted == correct:
@@ -297,6 +297,11 @@ if __name__ == "__main__":
     train_dataset, train_questions, word_to_id, num_words = parse_dataset(train_file)
     test_dataset, test_questions, _, _ = parse_dataset(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
-    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=10, margin=1.0, word_to_id=word_to_id)
+    if len(sys.argv) > 2:
+        n_epochs = int(sys.argv[2])
+    else:
+        n_epochs = 10
+
+    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=1.0, word_to_id=word_to_id)
     memNN.train(train_dataset, train_questions)
     memNN.predict(test_dataset, test_questions)
