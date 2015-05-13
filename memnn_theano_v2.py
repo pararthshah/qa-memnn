@@ -36,12 +36,13 @@ class MemNN:
         phi_r = T.vector('phi_r')
 
         # False words
-        phi_rbar = T.vector('phi_rbar')
+        phi_rbar1 = T.vector('phi_rbar1')
+        phi_rbar2 = T.vector('phi_rbar2')
 
         self.U_O = init_shared_normal(n_embedding, self.n_D, 0.01)
         self.U_R = init_shared_normal(n_embedding, self.n_D, 0.01)
 
-        cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar)
+        cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2)
         params = [self.U_O, self.U_R]
         gradient = T.grad(cost, params)
 
@@ -50,7 +51,7 @@ class MemNN:
             updates.append((param, param - gparam * self.lr))
 
         self.train_function = theano.function(
-            inputs = [phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar],
+            inputs = [phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2],
             outputs = cost,
             updates = updates)
 
@@ -71,7 +72,7 @@ class MemNN:
 
     # phi_f1_1 = phi_f1 - phi_f1bar + phi_t1_1
     # phi_f1_2 = phi_f1bar - phi_f1 + phi_t1_2
-    def calc_cost(self, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar):
+    def calc_cost(self, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2):
         score1_1 = self.calc_score_o(phi_x, phi_f1_1)
         score1_2 = self.calc_score_o(phi_x, phi_f1_2)
 
@@ -79,12 +80,14 @@ class MemNN:
         score2_2 = self.calc_score_o(phi_x + phi_m0, phi_f2_2)
 
         correct_score3 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_r)
-        false_score3 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_rbar)
+        false_score3 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_rbar1)
+        false_score4 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_rbar2)
 
         cost = (
             T.maximum(0, self.margin - score1_1) + T.maximum(0, self.margin + score1_2) +
             T.maximum(0, self.margin - score2_1) + T.maximum(0, self.margin + score2_2) +
-            T.maximum(0, self.margin - correct_score3 + false_score3)
+            T.maximum(0, self.margin - correct_score3 + false_score3) +
+            T.maximum(0, self.margin - correct_score3 + false_score4)
         )
 
         return cost
@@ -98,7 +101,7 @@ class MemNN:
         assert(phi_type >= 0 and phi_type < 5)
         phi = np.zeros((3*self.n_words + 3,))
         if phi_type < 3:
-            assert(bow != None)
+            assert(bow is not None)
             phi[phi_type*self.n_words:(phi_type+1)*self.n_words] = bow
         elif phi_type == 3:
             assert(word_id != None and word_id < self.n_words)
@@ -189,13 +192,17 @@ class MemNN:
                 phi_r = self.construct_phi(3, word_id=correct_word)
 
                 # False word
-                false_word, score = self.find_word(phi_x + phi_m0 + phi_m1, verbose=False)
-                if false_word == correct_word:
-                    false_word = self.neg_sample(correct_word, self.n_words)
-                phi_rbar = self.construct_phi(3, word_id=false_word)
+                # Find the highest ranking word, if it is the correct word, find another
+                false_word1, score = self.find_word(phi_x + phi_m0 + phi_m1, verbose=False)
+                if false_word1 == correct_word:
+                    false_word1 = self.neg_sample(correct_word, self.n_words)
+                phi_rbar1 = self.construct_phi(3, word_id=false_word1)
+                # Negative sample twice
+                false_word2 = self.neg_sample(correct_word, self.n_words)
+                phi_rbar2 = self.construct_phi(3, word_id=false_word2)
 
                 if article_no == 1 and line_no == 12:
-                    print '[SAMPLE] %s\t%s' % (self.id_to_word[correct_word], self.id_to_word[false_word])
+                    print '[SAMPLE] %s\t%s\t%s' % (self.id_to_word[correct_word], self.id_to_word[false_word1], self.id_to_word[false_word2])
                     w, score = self.find_word(phi_x + phi_m0 + phi_m1, verbose=False)
                     print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d\ta:%s\ts:%.3f\tc:%s" % (
                         self.predict_function_o(phi_x, phi_f1_1),
@@ -206,7 +213,7 @@ class MemNN:
                         self.id_to_word[w], score, self.id_to_word[correct_word]
                     )
 
-                cost = self.train_function(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar)
+                cost = self.train_function(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2)
                 costs.append(cost)
 
                 if article_no == 1 and line_no == 12:
@@ -302,6 +309,6 @@ if __name__ == "__main__":
     else:
         n_epochs = 10
 
-    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=1.0, word_to_id=word_to_id)
+    memNN = MemNN(n_words=num_words, n_embedding=10, lr=0.002, n_epochs=n_epochs, margin=1.0, word_to_id=word_to_id)
     memNN.train(train_dataset, train_questions)
     memNN.predict(test_dataset, test_questions)
