@@ -6,9 +6,10 @@ import sys, random, pprint
 from util import *
 
 class MemNN:
-    def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100, word_to_id=None):
+    def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100, momentum=0.9, word_to_id=None):
         self.n_embedding = n_embedding
         self.lr = lr
+        self.momentum = momentum
         self.margin = margin
         self.n_epochs = n_epochs
         self.n_words = n_words
@@ -36,22 +37,31 @@ class MemNN:
         phi_r = T.vector('phi_r')
 
         # False words
-        phi_rbar1 = T.vector('phi_rbar1')
-        phi_rbar2 = T.vector('phi_rbar2')
+        phi_rbars = T.matrix('phi_rbars')
 
         self.U_O = init_shared_normal(n_embedding, self.n_D, 0.01)
         self.U_R = init_shared_normal(n_embedding, self.n_D, 0.01)
 
-        cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2)
+        # Total S_R cost for all sampled words
+        tot_sr_cost = T.scalar('sr_cost')
+
+        cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbars, tot_sr_cost)
         params = [self.U_O, self.U_R]
         gradient = T.grad(cost, params)
 
+        l_rate = T.scalar('l_rate')
+
         updates=[]
         for param, gparam in zip(params, gradient):
-            updates.append((param, param - gparam * self.lr))
+            param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
+            updates.append((param, param - param_update * l_rate))
+            updates.append((param_update, self.momentum*param_update + (1. - self.momentum)*gparam))
 
         self.train_function = theano.function(
-            inputs = [phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2],
+            inputs = [phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, \
+                      phi_m0, phi_m1, phi_r, phi_rbars, \
+                      theano.Param(l_rate, default=self.lr), \
+                      theano.Param(tot_sr_cost, default=0.0)],
             outputs = cost,
             updates = updates)
 
@@ -72,24 +82,27 @@ class MemNN:
 
     # phi_f1_1 = phi_f1 - phi_f1bar + phi_t1_1
     # phi_f1_2 = phi_f1bar - phi_f1 + phi_t1_2
-    def calc_cost(self, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2):
+    def calc_cost(self, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbars, tot_sr_cost):
         score1_1 = self.calc_score_o(phi_x, phi_f1_1)
         score1_2 = self.calc_score_o(phi_x, phi_f1_2)
 
         score2_1 = self.calc_score_o(phi_x + phi_m0, phi_f2_1)
         score2_2 = self.calc_score_o(phi_x + phi_m0, phi_f2_2)
 
-        correct_score3 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_r)
-        false_score3 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_rbar1)
-        false_score4 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_rbar2)
-
-        cost = (
+        s_o_cost = (
             T.maximum(0, self.margin - score1_1) + T.maximum(0, self.margin + score1_2) +
-            T.maximum(0, self.margin - score2_1) + T.maximum(0, self.margin + score2_2) +
-            T.maximum(0, self.margin - correct_score3 + false_score3) +
-            T.maximum(0, self.margin - correct_score3 + false_score4)
+            T.maximum(0, self.margin - score2_1) + T.maximum(0, self.margin + score2_2)
         )
 
+        def compute_sr_cost(phi_rbar, correct_score):
+            false_score = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_rbar)
+            return T.maximum(0, self.margin - correct_score + false_score)
+
+        correct_score3 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_r)
+        sr_costs, sr_updates = theano.reduce(lambda phi_rbar, tot_sr_cost: tot_sr_cost + compute_sr_cost(phi_rbar, correct_score3), 
+                                             sequences=phi_rbars, outputs_info=[{'initial': tot_sr_cost}])
+
+        cost = s_o_cost + sr_costs
         return cost
 
     def construct_phi(self, phi_type, bow=None, word_id=None, ids=None):
@@ -145,9 +158,13 @@ class MemNN:
 
         return index_m0, m0
 
-    def train(self, dataset_bow, questions):
+    def train(self, dataset_bow, questions, lr_schedule=None):
+        l_rate = self.lr
         for epoch in xrange(self.n_epochs):
             costs = []
+
+            if lr_schedule != None and epoch in lr_schedule:
+                l_rate = lr_schedule[epoch]
 
             random.shuffle(questions)
             for i, question in enumerate(questions):
@@ -192,17 +209,19 @@ class MemNN:
                 phi_r = self.construct_phi(3, word_id=correct_word)
 
                 # False word
-                # Find the highest ranking word, if it is the correct word, find another
+                false_word_ids = [i for i in range(self.n_words)]
+                del false_word_ids[correct_word]
+                # Find the highest ranking word, if it isnt the correct word, add it to list
+                # Possible that this word will be added twice, but that is okay
                 false_word1, score = self.find_word(phi_x + phi_m0 + phi_m1, verbose=False)
-                if false_word1 == correct_word:
-                    false_word1 = self.neg_sample(correct_word, self.n_words)
-                phi_rbar1 = self.construct_phi(3, word_id=false_word1)
-                # Negative sample twice
-                false_word2 = self.neg_sample(correct_word, self.n_words)
-                phi_rbar2 = self.construct_phi(3, word_id=false_word2)
+                if false_word1 != correct_word:
+                    false_word_ids.insert(0, false_word1)
+                # Clip no. of samples to 20
+                false_word_ids = false_word_ids[:min(20,len(false_word_ids))]
+                phi_rbars = np.vstack(tuple(map(lambda word_id: self.construct_phi(3, word_id=word_id), false_word_ids)))
 
                 if article_no == 1 and line_no == 12:
-                    print '[SAMPLE] %s\t%s\t%s' % (self.id_to_word[correct_word], self.id_to_word[false_word1], self.id_to_word[false_word2])
+                    print '[SAMPLE] %s\t%s' % (self.id_to_word[correct_word], self.id_to_word[false_word1])
                     w, score = self.find_word(phi_x + phi_m0 + phi_m1, verbose=False)
                     print "[BEFORE] %.3f\t%.3f\t%.3f\t%.3f\tm0:%d\tm1:%d\ta:%s\ts:%.3f\tc:%s" % (
                         self.predict_function_o(phi_x, phi_f1_1),
@@ -213,7 +232,9 @@ class MemNN:
                         self.id_to_word[w], score, self.id_to_word[correct_word]
                     )
 
-                cost = self.train_function(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0, phi_m1, phi_r, phi_rbar1, phi_rbar2)
+                cost = self.train_function(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, \
+                                           phi_m0, phi_m1, phi_r, phi_rbars, \
+                                           l_rate)
                 costs.append(cost)
 
                 if article_no == 1 and line_no == 12:
@@ -282,7 +303,7 @@ class MemNN:
 
                 c1 = int(question[4].split(' ')[0])
                 c2 = int(question[4].split(' ')[1])
-                if index_m0 == c1 or index_m0 == c2 or index_m1 == c1 or index_m1 == c2:
+                if (index_m0 == c1 or index_m0 == c2) and (index_m1 == c1 or index_m1 == c2):
                     fake_correct_answers += 1
 
             if article_no <= 2:
@@ -309,6 +330,7 @@ if __name__ == "__main__":
     else:
         n_epochs = 10
 
-    memNN = MemNN(n_words=num_words, n_embedding=10, lr=0.002, n_epochs=n_epochs, margin=1.0, word_to_id=word_to_id)
+    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=0.1, word_to_id=word_to_id)
+    # memNN.train(train_dataset, train_questions, lr_schedule=dict([(0, 0.01), (20, 0.005), (50, 0.001)]))
     memNN.train(train_dataset, train_questions)
     memNN.predict(test_dataset, test_questions)
