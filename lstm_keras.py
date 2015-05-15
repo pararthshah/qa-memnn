@@ -22,10 +22,20 @@ class LSTM:
         self.model.compile(loss='binary_crossentropy', optimizer='rmsprop')
 
     def train(self, dataset, labels):
-        self.model.fit(X_train, Y_train, batch_size=16, nb_epoch=10)
+        assert(len(dataset) == len(labels))
+        for i in xrange(len(dataset)):
+            x = dataset[i]
+            y = labels[i]
+            for word in x:
+                self.model.train(word, y)
 
     def predict(self, dataset, labels):
-        score = self.model.evaluate(X_test, Y_test, batch_size=16)
+        assert(len(dataset) == len(labels))
+        for i in xrange(len(dataset)):
+            x = dataset[i]
+            y = labels[i]
+            for word in x:
+                self.model.evaluate(word, y)
 
 if __name__ == "__main__":
     train_file = sys.argv[1]
