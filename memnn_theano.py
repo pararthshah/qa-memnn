@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 import sys, random
 
-from util import *
+from theano_util import *
 
 class MemNN:
     def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100):

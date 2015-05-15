@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 import sys, random, pprint
 
-from util import *
+from theano_util import *
 
 class MemNN:
     def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100, momentum=0.9, word_to_id=None):
@@ -99,7 +99,7 @@ class MemNN:
             return T.maximum(0, self.margin - correct_score + false_score)
 
         correct_score3 = self.calc_score_r(phi_x + phi_m0 + phi_m1, phi_r)
-        sr_costs, sr_updates = theano.reduce(lambda phi_rbar, tot_sr_cost: tot_sr_cost + compute_sr_cost(phi_rbar, correct_score3), 
+        sr_costs, sr_updates = theano.reduce(lambda phi_rbar, tot_sr_cost: tot_sr_cost + compute_sr_cost(phi_rbar, correct_score3),
                                              sequences=phi_rbars, outputs_info=[{'initial': tot_sr_cost}])
 
         cost = s_o_cost + sr_costs
