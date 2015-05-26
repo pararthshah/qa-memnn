@@ -22,6 +22,7 @@ class MemNN:
         self.id_to_word = dict((v, k) for k, v in word_to_id.iteritems())
 
         # Question
+        x = T.vector('x')
         phi_x = T.vector('phi_x')
 
         # True statements
@@ -33,14 +34,18 @@ class MemNN:
         phi_f2_2 = T.vector('phi_f2_2')
 
         # Supporting memories
+        m0 = T.vector('m0')
+        m1 = T.vector('m1')
         phi_m0 = T.vector('phi_m0')
         phi_m1 = T.vector('phi_m1')
 
         # True word
-        phi_r = T.vector('phi_r')
+        r = T.vector('r')
 
+        # Scoring function
         self.U_O = init_shared_normal(n_embedding, self.n_D, 0.01)
 
+        # LSTM
         self.W_i = glorot_uniform((self.n_embedding, self.n_words))
         self.U_i = orthogonal((self.n_words, self.n_words))
         self.b_i = shared_zeros((self.n_words))
@@ -57,12 +62,11 @@ class MemNN:
         self.U_o = orthogonal((self.n_words, self.n_words))
         self.b_o = shared_zeros((self.n_words))
 
-        X = T.tensor3('X')
-        lstm_cost = self.lstm_cost(X, phi_r)
+        mem_cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0)
 
-        cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0)
+        lstm_cost = self.lstm_cost(x, m0, m1, r)
 
-        cost = cost + lstm_cost
+        cost = mem_cost + lstm_cost
 
         params = [
             self.U_O,
@@ -76,19 +80,22 @@ class MemNN:
 
         l_rate = T.scalar('l_rate')
 
+        # Parameter updates
         updates=[]
         for param, gparam in zip(params, gradient):
             param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
             updates.append((param, param - param_update * l_rate))
             updates.append((param_update, self.momentum*param_update + (1. - self.momentum)*gparam))
 
+        # Theano functions
         self.train_function = theano.function(
-            inputs = [phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
-                      phi_m0, phi_m1, phi_r,
-                      theano.Param(l_rate, default=self.lr),
-                      theano.Param(tot_sr_cost, default=0.0)],
+            inputs = [x, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
+                      m0, m1, phi_m0, phi_m1, r,
+                      theano.Param(l_rate, default=self.lr)],
             outputs = cost,
-            updates = updates)
+            updates = updates,
+            on_unused_input='warn',
+            mode='FAST_COMPILE')
 
         # Candidate statement for prediction
         phi_f = T.vector('phi_f')
@@ -110,7 +117,9 @@ class MemNN:
         h_t = o_t * tanh(c_t)
         return h_t, c_t
 
-    def lstm_cost(self, X, r):
+    def lstm_cost(self, x, m0, m1, r):
+        X = T.stack(x, m0, m1)
+
         xi = T.dot(X, self.W_i) + self.b_i
         xf = T.dot(X, self.W_f) + self.b_f
         xc = T.dot(X, self.W_c) + self.b_c
@@ -127,7 +136,7 @@ class MemNN:
             truncate_gradient=-1
         )
 
-        return -T.mul(r, T.log(outputs[-1]))
+        return -T.sum(T.mul(r, T.log(outputs[-1])))
 
     def calc_score_o(self, phi_x, phi_y_yp_t):
         return T.dot(self.U_O.dot(phi_x), self.U_O.dot(phi_y_yp_t))
