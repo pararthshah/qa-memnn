@@ -34,6 +34,9 @@ def load_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True, mod
                         if token not in word_to_id:
                             word_to_id[token] = word_id
                             word_id += 1
+                    if question_parts[1] not in word_to_id:
+                            word_to_id[question_parts[1]] = word_id
+                            word_id += 1
 
                 stmt_ids = map(int, question_parts[2].strip().split())
                 sequence = []
@@ -77,6 +80,10 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         mode = sys.argv[2] # should be 'baseline' or 'memnn'
 
+    nb_epoch = 10
+    if len(sys.argv) > 3:
+        nb_epoch = int(sys.argv[3])
+
     print("Loading train data...")
     X_train, y_train, word_to_id, num_words = load_dataset(train_file, mode=mode)
     print("Loading test data...")
@@ -114,7 +121,7 @@ if __name__ == "__main__":
     model.compile(loss='categorical_crossentropy', optimizer=rms_optimizer, class_mode="categorical", theano_mode='FAST_COMPILE')
 
     print("Train...")
-    model.fit(X_train, y_train_cat, batch_size=batch_size, nb_epoch=10, validation_split=0.1, show_accuracy=True)
+    model.fit(X_train, y_train_cat, batch_size=batch_size, nb_epoch=nb_epoch, validation_split=0.1, show_accuracy=True)
     score = model.evaluate(X_test, y_test_cat, batch_size=batch_size)
     print('Test score:', score)
 
