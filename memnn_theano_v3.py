@@ -46,19 +46,19 @@ class MemNN:
         self.U_O = init_shared_normal(n_embedding, self.n_D, 0.01)
 
         # LSTM
-        self.W_i = glorot_uniform((self.n_embedding, self.n_words))
+        self.W_i = glorot_uniform((self.n_words, self.n_words))
         self.U_i = orthogonal((self.n_words, self.n_words))
         self.b_i = shared_zeros((self.n_words))
 
-        self.W_f = glorot_uniform((self.n_embedding, self.n_words))
+        self.W_f = glorot_uniform((self.n_words, self.n_words))
         self.U_f = orthogonal((self.n_words, self.n_words))
         self.b_f = shared_zeros((self.n_words))
 
-        self.W_c = glorot_uniform((self.n_embedding, self.n_words))
+        self.W_c = glorot_uniform((self.n_words, self.n_words))
         self.U_c = orthogonal((self.n_words, self.n_words))
         self.b_c = shared_zeros((self.n_words))
 
-        self.W_o = glorot_uniform((self.n_embedding, self.n_words))
+        self.W_o = glorot_uniform((self.n_words, self.n_words))
         self.U_o = orthogonal((self.n_words, self.n_words))
         self.b_o = shared_zeros((self.n_words))
 
@@ -103,9 +103,6 @@ class MemNN:
         score_o = self.calc_score_o(phi_x, phi_f)
         self.predict_function_o = theano.function(inputs = [phi_x, phi_f], outputs = score_o)
 
-        score_r = self.calc_score_r(phi_x, phi_f)
-        self.predict_function_r = theano.function(inputs = [phi_x, phi_f], outputs = score_r)
-
     def _step(self,
         xi_t, xf_t, xo_t, xc_t,
         h_tm1, c_tm1,
@@ -117,20 +114,30 @@ class MemNN:
         h_t = o_t * tanh(c_t)
         return h_t, c_t
 
-    def lstm_cost(self, x, m0, m1, r):
-        X = T.stack(x, m0, m1)
+    def _lstm_fn(self, X):
+        xi = T.dot(self.W_i, X.T) + self.b_i
+        xf = T.dot(self.W_f, X.T) + self.b_f
+        xc = T.dot(self.W_c, X.T) + self.b_c
+        xo = T.dot(self.W_o, X.T) + self.b_o
+        return xi, xf, xc, xo
 
-        xi = T.dot(X, self.W_i) + self.b_i
-        xf = T.dot(X, self.W_f) + self.b_f
-        xc = T.dot(X, self.W_c) + self.b_c
-        xo = T.dot(X, self.W_o) + self.b_o
+    def lstm_cost(self, x, m0, m1, r):
+        s1 = self._lstm_fn(x)
+        s2 = self._lstm_fn(m0)
+        s3 = self._lstm_fn(m1)
+        seq = [
+            T.stack(s1[0], s2[0], s3[0]),
+            T.stack(s1[1], s2[1], s3[1]),
+            T.stack(s1[2], s2[2], s3[2]),
+            T.stack(s1[3], s2[3], s3[3]),
+        ]
 
         [outputs, memories], updates = theano.scan(
             self._step,
-            sequences=[xi, xf, xo, xc],
+            sequences=seq,
             outputs_info=[
-                alloc_zeros_matrix(X.shape[1], self.n_words),
-                alloc_zeros_matrix(X.shape[1], self.n_words)
+                alloc_zeros_matrix(3, self.n_words),
+                alloc_zeros_matrix(3, self.n_words)
             ],
             non_sequences=[self.U_i, self.U_f, self.U_o, self.U_c],
             truncate_gradient=-1
@@ -140,9 +147,6 @@ class MemNN:
 
     def calc_score_o(self, phi_x, phi_y_yp_t):
         return T.dot(self.U_O.dot(phi_x), self.U_O.dot(phi_y_yp_t))
-
-    def calc_score_r(self, phi_x, phi_y):
-        return T.dot(self.U_R.dot(phi_x), self.U_R.dot(phi_y))
 
     # phi_f1_1 = phi_f1 - phi_f1bar + phi_t1_1
     # phi_f1_2 = phi_f1bar - phi_f1 + phi_t1_2
@@ -180,6 +184,11 @@ class MemNN:
             if ids[0] > ids[2]: phi[3*self.n_words+1] = 1
             if ids[1] > ids[2]: phi[3*self.n_words+2] = 1
         return phi
+
+    def make_one_hot(self, index):
+        v = np.zeros((self.n_words))
+        v[index] = 1.0
+        return v
 
     # returns (phi_y - phi_yp + phi_t)
     def construct_wt_phi(self, index_x, index_y, index_yp, y, yp):
@@ -235,6 +244,7 @@ class MemNN:
                     continue
 
                 # The question
+                x = question_phi
                 phi_x = self.construct_phi(0, bow=question_phi)
 
                 # Find m0
@@ -261,11 +271,12 @@ class MemNN:
 
                 # Correct word
                 correct_word = question[3]
-                phi_r = self.construct_phi(3, word_id=correct_word)
+                r = self.make_one_hot(correct_word)
 
-                cost = self.train_function(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
-                                           phi_m0, phi_m1, phi_r,
+                cost = self.train_function(x, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
+                                           m0, m1, phi_m0, phi_m1, r,
                                            l_rate)
+                print "%d: %f" % (i, cost)
                 costs.append(cost)
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
