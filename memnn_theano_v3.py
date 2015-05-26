@@ -96,6 +96,7 @@ class MemNN:
             updates = updates,
             on_unused_input='warn',
             mode='FAST_COMPILE')
+            #mode='DebugMode')
 
         # Candidate statement for prediction
         phi_f = T.vector('phi_f')
