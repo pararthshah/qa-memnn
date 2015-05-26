@@ -47,13 +47,13 @@ def load_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True, mod
 
                 for token in tokens[1:]:
                     sequence.append(token)
-                
+
                 if article_no == 0:
                     print("seq: %s | label: %s" % (' '.join(sequence).ljust(70), question_parts[1]))
 
                 dataset_ids.append(map(lambda t: word_to_id[t], sequence))
                 label_ids.append(word_to_id[question_parts[1]])
-                
+
             else: # statement
                 tokens = re.sub(r'([\.\?])$', r' \1', line).split()
                 if update_word_ids:
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     sgd_optimizer = SGD(lr=0.006, momentum=0.9, decay=0.99, nesterov=True)
     adg_optimizer = Adagrad()
     rms_optimizer = RMSprop()
-    model.compile(loss='categorical_crossentropy', optimizer=rms_optimizer, class_mode="categorical")
+    model.compile(loss='categorical_crossentropy', optimizer=rms_optimizer, class_mode="categorical", theano_mode='FAST_COMPILE')
 
     print("Train...")
     model.fit(X_train, y_train_cat, batch_size=batch_size, nb_epoch=10, validation_split=0.1, show_accuracy=True)
