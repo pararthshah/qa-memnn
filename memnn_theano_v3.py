@@ -17,6 +17,7 @@ def inspect_outputs(i, node, fn):
 class MemNN:
     def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100, momentum=0.9, word_to_id=None):
         self.n_embedding = n_embedding
+        self.n_lstm_embed = n_embedding
         self.lr = lr
         self.momentum = momentum
         self.margin = margin
@@ -142,6 +143,8 @@ class MemNN:
         seq2 = T.stack(s1[2], s2[2], s3[2])
         seq3 = T.stack(s1[3], s2[3], s3[3])
 
+        # Since we have only 3 inputs always, maybe we shouldn't use scan
+        # and do it directly.
         [outputs, memories], updates = theano.scan(
             self._step,
             sequences=[
@@ -358,4 +361,5 @@ if __name__ == "__main__":
     memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=0.1, word_to_id=word_to_id)
     # memNN.train(train_dataset, train_questions, lr_schedule=dict([(0, 0.01), (20, 0.005), (50, 0.001)]))
     memNN.train(train_dataset, train_questions)
+    #memNN.predict(train_dataset, train_questions)
     memNN.predict(test_dataset, test_questions)
