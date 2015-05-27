@@ -104,8 +104,8 @@ class MemNN:
             outputs = cost,
             updates = updates,
             on_unused_input='warn',
-            #)
-            mode='FAST_COMPILE')
+            )
+            #mode='FAST_COMPILE')
             #mode='DebugMode')
             #mode=theano.compile.MonitorMode(pre_func=inspect_inputs,post_func=inspect_outputs))
 
@@ -298,8 +298,6 @@ class MemNN:
 
     def find_word(self, x, m0, m1):
         probs = self.predict_function_r(x, m0, m1)
-        print(probs)
-        print(probs.shape)
         return np.argmax(probs)
 
     def predict(self, dataset, questions):
