@@ -104,8 +104,8 @@ class MemNN:
             outputs = cost,
             updates = updates,
             on_unused_input='warn',
-            )
-            #mode='FAST_COMPILE')
+            #)
+            mode='FAST_COMPILE')
             #mode='DebugMode')
             #mode=theano.compile.MonitorMode(pre_func=inspect_inputs,post_func=inspect_outputs))
 
@@ -137,19 +137,22 @@ class MemNN:
         s1 = self._lstm_fn(x)
         s2 = self._lstm_fn(m0)
         s3 = self._lstm_fn(m1)
-        seq = [
-            T.stack(s1[0], s2[0], s3[0]),
-            T.stack(s1[1], s2[1], s3[1]),
-            T.stack(s1[2], s2[2], s3[2]),
-            T.stack(s1[3], s2[3], s3[3]),
-        ]
+        seq0 = T.stack(s1[0], s2[0], s3[0])
+        seq1 = T.stack(s1[1], s2[1], s3[1])
+        seq2 = T.stack(s1[2], s2[2], s3[2])
+        seq3 = T.stack(s1[3], s2[3], s3[3])
 
         [outputs, memories], updates = theano.scan(
             self._step,
-            sequences=seq,
+            sequences=[
+                dict(input = seq0),
+                dict(input = seq1),
+                dict(input = seq2),
+                dict(input = seq3),
+            ],
             outputs_info=[
-                alloc_zeros_matrix(3, self.n_words),
-                alloc_zeros_matrix(3, self.n_words)
+                alloc_zeros_matrix(self.n_words),
+                alloc_zeros_matrix(self.n_words)
             ],
             non_sequences=[self.U_i, self.U_f, self.U_o, self.U_c],
             truncate_gradient=-1
@@ -295,6 +298,8 @@ class MemNN:
 
     def find_word(self, x, m0, m1):
         probs = self.predict_function_r(x, m0, m1)
+        print(probs)
+        print(probs.shape)
         return np.argmax(probs)
 
     def predict(self, dataset, questions):
@@ -332,6 +337,7 @@ class MemNN:
                     fake_correct_answers += 1
 
             predicted = self.find_word(x, m0, m1)
+            print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
             if predicted == correct:
                 correct_answers += 1
             else:
