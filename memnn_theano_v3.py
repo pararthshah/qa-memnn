@@ -8,6 +8,12 @@ from keras.activations import tanh, hard_sigmoid
 from keras.initializations import glorot_uniform, orthogonal
 from keras.utils.theano_utils import shared_zeros, alloc_zeros_matrix
 
+def inspect_inputs(i, node, fn):
+    print i, node, "inputs:", [input[0] for input in fn.inputs],
+
+def inspect_outputs(i, node, fn):
+    print i, node, "outputs:", [output[0] for output in fn.outputs]
+
 class MemNN:
     def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100, momentum=0.9, word_to_id=None):
         self.n_embedding = n_embedding
@@ -64,7 +70,10 @@ class MemNN:
 
         mem_cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0)
 
-        lstm_cost = self.lstm_cost(x, m0, m1, r)
+        lstm_output = self.lstm_cost(x, m0, m1)
+        self.predict_function_r = theano.function(inputs = [x, m0, m1], outputs = lstm_output)
+
+        lstm_cost = -T.sum(T.mul(r, T.log(lstm_output)))
 
         cost = mem_cost + lstm_cost
 
@@ -95,8 +104,10 @@ class MemNN:
             outputs = cost,
             updates = updates,
             on_unused_input='warn',
-            mode='FAST_COMPILE')
+            )
+            #mode='FAST_COMPILE')
             #mode='DebugMode')
+            #mode=theano.compile.MonitorMode(pre_func=inspect_inputs,post_func=inspect_outputs))
 
         # Candidate statement for prediction
         phi_f = T.vector('phi_f')
@@ -122,29 +133,32 @@ class MemNN:
         xo = T.dot(self.W_o, X.T) + self.b_o
         return xi, xf, xc, xo
 
-    def lstm_cost(self, x, m0, m1, r):
+    def lstm_cost(self, x, m0, m1):
         s1 = self._lstm_fn(x)
         s2 = self._lstm_fn(m0)
         s3 = self._lstm_fn(m1)
-        seq = [
-            T.stack(s1[0], s2[0], s3[0]),
-            T.stack(s1[1], s2[1], s3[1]),
-            T.stack(s1[2], s2[2], s3[2]),
-            T.stack(s1[3], s2[3], s3[3]),
-        ]
+        seq0 = T.stack(s1[0], s2[0], s3[0])
+        seq1 = T.stack(s1[1], s2[1], s3[1])
+        seq2 = T.stack(s1[2], s2[2], s3[2])
+        seq3 = T.stack(s1[3], s2[3], s3[3])
 
         [outputs, memories], updates = theano.scan(
             self._step,
-            sequences=seq,
+            sequences=[
+                dict(input = seq0),
+                dict(input = seq1),
+                dict(input = seq2),
+                dict(input = seq3),
+            ],
             outputs_info=[
-                alloc_zeros_matrix(3, self.n_words),
-                alloc_zeros_matrix(3, self.n_words)
+                alloc_zeros_matrix(self.n_words),
+                alloc_zeros_matrix(self.n_words)
             ],
             non_sequences=[self.U_i, self.U_f, self.U_o, self.U_c],
             truncate_gradient=-1
         )
 
-        return -T.sum(T.mul(r, T.log(outputs[-1])))
+        return T.nnet.softmax(outputs[-1])
 
     def calc_score_o(self, phi_x, phi_y_yp_t):
         return T.dot(self.U_O.dot(phi_x), self.U_O.dot(phi_y_yp_t))
@@ -277,28 +291,14 @@ class MemNN:
                 cost = self.train_function(x, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
                                            m0, m1, phi_m0, phi_m1, r,
                                            l_rate)
-                print "%d: %f" % (i, cost)
+                #print "%d: %f" % (i, cost)
                 costs.append(cost)
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
 
-    def find_word(self, phi_x, verbose=False):
-        max_score = float("-inf")
-        best_word = -1
-        for i in xrange(self.n_words):
-            phi_r = self.construct_phi(3, word_id=i)
-            score = self.predict_function_r(phi_x, phi_r)
-            if verbose:
-                print '[  FIND] w:%s\ts:%.3f' % (
-                    self.id_to_word[i],
-                    score
-                )
-            if score > max_score:
-                max_score = score
-                best_word = i
-
-        assert(best_word >= 0)
-        return best_word, score
+    def find_word(self, x, m0, m1):
+        probs = self.predict_function_r(x, m0, m1)
+        return np.argmax(probs)
 
     def predict(self, dataset, questions):
         correct_answers = 0
@@ -310,6 +310,7 @@ class MemNN:
             question_phi = question[2]
             correct = question[3]
 
+            x = question_phi
             phi_x = self.construct_phi(0, bow=question_phi)
 
             statements = dataset[article_no]
@@ -327,14 +328,14 @@ class MemNN:
                 index_m0, m0 = self.find_m0(line_no, phi_x, statements[:line_no])
                 phi_m0 = self.construct_phi(1, m0)
                 index_m1, m1 = self.find_m0(index_m0, phi_x + phi_m0, statements[:line_no], ignore=index_m0)
-                phi_m1 = self.construct_phi(1, m1)
 
                 c1 = int(question[4].split(' ')[0])
                 c2 = int(question[4].split(' ')[1])
                 if (index_m0 == c1 or index_m0 == c2) and (index_m1 == c1 or index_m1 == c2):
                     fake_correct_answers += 1
 
-            predicted, _ = self.find_word(phi_x + phi_m0 + phi_m1)
+            predicted = self.find_word(x, m0, m1)
+            print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
             if predicted == correct:
                 correct_answers += 1
             else:
