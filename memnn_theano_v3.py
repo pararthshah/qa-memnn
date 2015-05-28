@@ -15,14 +15,13 @@ def inspect_outputs(i, node, fn):
     print i, node, "outputs:", [output[0] for output in fn.outputs]
 
 class MemNN:
-    def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100, momentum=0.9, word_to_id=None):
+    def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, momentum=0.9, word_to_id=None):
         self.n_embedding = n_embedding
         self.n_lstm_embed = n_embedding
         self.word_embed = n_embedding
         self.lr = lr
         self.momentum = momentum
         self.margin = margin
-        self.n_epochs = n_epochs
         self.n_words = n_words
         self.n_D = 3 * self.n_words + 3
 
@@ -286,9 +285,9 @@ class MemNN:
 
         return index_m0, m0
 
-    def train(self, dataset_seq, dataset_bow, questions, lr_schedule=None):
+    def train(self, dataset_seq, dataset_bow, questions, n_epochs=100, lr_schedule=None):
         l_rate = self.lr
-        for epoch in xrange(self.n_epochs):
+        for epoch in xrange(n_epochs):
             costs = []
 
             if lr_schedule != None and epoch in lr_schedule:
@@ -408,9 +407,13 @@ if __name__ == "__main__":
     else:
         n_epochs = 10
 
-    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=0.1, word_to_id=word_to_id)
-    memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
+    memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, margin=0.1, word_to_id=word_to_id)
+    #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions)
     #memNN.predict(train_dataset, train_questions)
-    memNN.predict(test_dataset_seq, test_dataset_bow, test_questions)
+    #memNN.predict(test_dataset_seq, test_dataset_bow, test_questions)
+
+    for i in xrange(20):
+        memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=5)
+        memNN.predict(test_dataset_seq, test_dataset_bow, test_questions)
