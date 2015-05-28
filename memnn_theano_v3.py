@@ -18,6 +18,7 @@ class MemNN:
     def __init__(self, n_words=1000, n_embedding=100, lr=0.01, margin=0.1, n_epochs=100, momentum=0.9, word_to_id=None):
         self.n_embedding = n_embedding
         self.n_lstm_embed = n_embedding
+        self.word_embed = n_embedding
         self.lr = lr
         self.momentum = momentum
         self.margin = margin
@@ -49,30 +50,37 @@ class MemNN:
         # True word
         r = T.vector('r')
 
+        # Word sequence
+        words = T.ivector('words')
+
         # Scoring function
         self.U_O = init_shared_normal(n_embedding, self.n_D, 0.01)
 
+        # Word embedding
+        self.L = glorot_uniform((self.n_words, self.word_embed))
+        self.Lprime = glorot_uniform((self.n_words, self.n_lstm_embed))
+
         # LSTM
-        self.W_i = glorot_uniform((self.n_words, self.n_words))
-        self.U_i = orthogonal((self.n_words, self.n_words))
-        self.b_i = shared_zeros((self.n_words))
+        self.W_i = glorot_uniform((self.word_embed, self.n_lstm_embed))
+        self.U_i = orthogonal((self.n_lstm_embed, self.n_lstm_embed))
+        self.b_i = shared_zeros((self.n_lstm_embed))
 
-        self.W_f = glorot_uniform((self.n_words, self.n_words))
-        self.U_f = orthogonal((self.n_words, self.n_words))
-        self.b_f = shared_zeros((self.n_words))
+        self.W_f = glorot_uniform((self.word_embed, self.n_lstm_embed))
+        self.U_f = orthogonal((self.n_lstm_embed, self.n_lstm_embed))
+        self.b_f = shared_zeros((self.n_lstm_embed))
 
-        self.W_c = glorot_uniform((self.n_words, self.n_words))
-        self.U_c = orthogonal((self.n_words, self.n_words))
-        self.b_c = shared_zeros((self.n_words))
+        self.W_c = glorot_uniform((self.word_embed, self.n_lstm_embed))
+        self.U_c = orthogonal((self.n_lstm_embed, self.n_lstm_embed))
+        self.b_c = shared_zeros((self.n_lstm_embed))
 
-        self.W_o = glorot_uniform((self.n_words, self.n_words))
-        self.U_o = orthogonal((self.n_words, self.n_words))
-        self.b_o = shared_zeros((self.n_words))
+        self.W_o = glorot_uniform((self.word_embed, self.n_lstm_embed))
+        self.U_o = orthogonal((self.n_lstm_embed, self.n_lstm_embed))
+        self.b_o = shared_zeros((self.n_lstm_embed))
 
         mem_cost = self.calc_cost(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2, phi_m0)
 
-        lstm_output = self.lstm_cost(x, m0, m1)
-        self.predict_function_r = theano.function(inputs = [x, m0, m1], outputs = lstm_output)
+        lstm_output = self.lstm_cost(words)
+        self.predict_function_r = theano.function(inputs = [words], outputs = lstm_output, allow_input_downcast=True)
 
         lstm_cost = -T.sum(T.mul(r, T.log(lstm_output)))
 
@@ -84,6 +92,7 @@ class MemNN:
             self.W_f, self.U_f, self.b_f,
             self.W_c, self.U_c, self.b_c,
             self.W_o, self.U_o, self.b_o,
+            self.L, self.Lprime
         ]
 
         gradient = T.grad(cost, params)
@@ -99,12 +108,13 @@ class MemNN:
 
         # Theano functions
         self.train_function = theano.function(
-            inputs = [x, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
-                      m0, m1, phi_m0, phi_m1, r,
+            inputs = [phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
+                      phi_m0, r, words,
                       theano.Param(l_rate, default=self.lr)],
             outputs = cost,
             updates = updates,
             on_unused_input='warn',
+            allow_input_downcast=True,
             )
             #mode='FAST_COMPILE')
             #mode='DebugMode')
@@ -117,9 +127,17 @@ class MemNN:
         self.predict_function_o = theano.function(inputs = [phi_x, phi_f], outputs = score_o)
 
     def _step(self,
-        xi_t, xf_t, xo_t, xc_t,
+        x,
         h_tm1, c_tm1,
-        u_i, u_f, u_o, u_c):
+        u_i, u_f, u_o, u_c,
+        w_i, w_f, w_o, w_c,
+        b_i, b_f, b_o, b_c):
+
+        xi_t = T.dot(x, w_i) + b_i
+        xf_t = T.dot(x, w_f) + b_f
+        xc_t = T.dot(x, w_c) + b_c
+        xo_t = T.dot(x, w_o) + b_o
+
         i_t = hard_sigmoid(xi_t + T.dot(h_tm1, u_i))
         f_t = hard_sigmoid(xf_t + T.dot(h_tm1, u_f))
         c_t = f_t * c_tm1 + i_t * tanh(xc_t + T.dot(h_tm1, u_c))
@@ -127,41 +145,30 @@ class MemNN:
         h_t = o_t * tanh(c_t)
         return h_t, c_t
 
-    def _lstm_fn(self, X):
-        xi = T.dot(self.W_i, X.T) + self.b_i
-        xf = T.dot(self.W_f, X.T) + self.b_f
-        xc = T.dot(self.W_c, X.T) + self.b_c
-        xo = T.dot(self.W_o, X.T) + self.b_o
-        return xi, xf, xc, xo
+    # words: word index in n_words
+    def lstm_cost(self, words):
+        x = self.L[words]
 
-    def lstm_cost(self, x, m0, m1):
-        s1 = self._lstm_fn(x)
-        s2 = self._lstm_fn(m0)
-        s3 = self._lstm_fn(m1)
-        seq0 = T.stack(s1[0], s2[0], s3[0])
-        seq1 = T.stack(s1[1], s2[1], s3[1])
-        seq2 = T.stack(s1[2], s2[2], s3[2])
-        seq3 = T.stack(s1[3], s2[3], s3[3])
+        # Each element of x is (word_embed,) shape
 
-        # Since we have only 3 inputs always, maybe we shouldn't use scan
-        # and do it directly.
         [outputs, memories], updates = theano.scan(
             self._step,
-            sequences=[
-                dict(input = seq0),
-                dict(input = seq1),
-                dict(input = seq2),
-                dict(input = seq3),
-            ],
+            sequences=[x],
             outputs_info=[
-                alloc_zeros_matrix(self.n_words),
-                alloc_zeros_matrix(self.n_words)
+                alloc_zeros_matrix(self.n_lstm_embed),
+                alloc_zeros_matrix(self.n_lstm_embed),
             ],
-            non_sequences=[self.U_i, self.U_f, self.U_o, self.U_c],
+            non_sequences=[
+                self.U_i, self.U_f, self.U_o, self.U_c,
+                self.W_i, self.W_f, self.W_o, self.W_c,
+                self.b_i, self.b_f, self.b_o, self.b_c,
+            ],
             truncate_gradient=-1
         )
 
-        return T.nnet.softmax(outputs[-1])
+        r = T.dot(self.Lprime, outputs[-1])
+
+        return T.nnet.softmax(r)
 
     def calc_score_o(self, phi_x, phi_y_yp_t):
         return T.dot(self.U_O.dot(phi_x), self.U_O.dot(phi_y_yp_t))
@@ -240,7 +247,7 @@ class MemNN:
 
         return index_m0, m0
 
-    def train(self, dataset_bow, questions, lr_schedule=None):
+    def train(self, dataset_seq, dataset_bow, questions, lr_schedule=None):
         l_rate = self.lr
         for epoch in xrange(self.n_epochs):
             costs = []
@@ -257,12 +264,12 @@ class MemNN:
                 correct_stmts = question[4].split(' ')
                 correct_stmt1 = int(correct_stmts[0])
                 correct_stmt2 = int(correct_stmts[1])
+                question_seq = question[-1]
 
                 if line_no <= 1:
                     continue
 
                 # The question
-                x = question_phi
                 phi_x = self.construct_phi(0, bow=question_phi)
 
                 # Find m0
@@ -291,19 +298,21 @@ class MemNN:
                 correct_word = question[3]
                 r = self.make_one_hot(correct_word)
 
-                cost = self.train_function(x, phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
-                                           m0, m1, phi_m0, phi_m1, r,
+                words = np.asarray(dataset_seq[article_no][index_m0] + dataset_seq[article_no][index_m1] + question_seq)
+
+                cost = self.train_function(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
+                                           phi_m0, r, words,
                                            l_rate)
                 #print "%d: %f" % (i, cost)
                 costs.append(cost)
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
 
-    def find_word(self, x, m0, m1):
-        probs = self.predict_function_r(x, m0, m1)
+    def find_word(self, words):
+        probs = self.predict_function_r(words)
         return np.argmax(probs)
 
-    def predict(self, dataset, questions):
+    def predict(self, dataset_seq, dataset_bow, questions):
         correct_answers = 0
         wrong_answers = 0
         fake_correct_answers = 0
@@ -312,11 +321,12 @@ class MemNN:
             line_no = question[1]
             question_phi = question[2]
             correct = question[3]
+            question_seq = question[-1]
 
             x = question_phi
             phi_x = self.construct_phi(0, bow=question_phi)
 
-            statements = dataset[article_no]
+            statements = dataset_bow[article_no]
 
             phi_m0 = None
             phi_m1 = None
@@ -337,7 +347,9 @@ class MemNN:
                 if (index_m0 == c1 or index_m0 == c2) and (index_m1 == c1 or index_m1 == c2):
                     fake_correct_answers += 1
 
-            predicted = self.find_word(x, m0, m1)
+            predicted = self.find_word(
+                np.asarray(dataset_seq[article_no][index_m0] + dataset_seq[article_no][index_m1] + question_seq)
+            )
             # print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
             if predicted == correct:
                 correct_answers += 1
@@ -350,8 +362,8 @@ if __name__ == "__main__":
     train_file = sys.argv[1]
     test_file = train_file.replace('train', 'test')
 
-    train_dataset, train_questions, word_to_id, num_words = parse_dataset(train_file)
-    test_dataset, test_questions, _, _ = parse_dataset(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    train_dataset_seq, train_dataset_bow, train_questions, word_to_id, num_words = parse_dataset(train_file)
+    test_dataset_seq, test_dataset_bow, test_questions, _, _ = parse_dataset(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     if len(sys.argv) > 2:
         n_epochs = int(sys.argv[2])
@@ -359,7 +371,7 @@ if __name__ == "__main__":
         n_epochs = 10
 
     memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=0.1, word_to_id=word_to_id)
-    memNN.train(train_dataset, train_questions, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005)]))
-    memNN.train(train_dataset, train_questions)
+    #memNN.train(train_dataset, train_questions, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005)]))
+    memNN.train(train_dataset_seq, train_dataset_bow, train_questions)
     #memNN.predict(train_dataset, train_questions)
-    memNN.predict(test_dataset, test_questions)
+    memNN.predict(test_dataset_seq, test_dataset_bow, test_questions)

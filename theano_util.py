@@ -64,8 +64,9 @@ def parse_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True):
         if len(statements) > 0:
             dataset.append(statements)
     dataset_bow = map(lambda y: map(lambda x: compute_bow(x, word_to_id, word_id), y), dataset)
+    dataset_seq = map(lambda y: map(lambda x: compute_seq(x, word_to_id, word_id), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, word_id), questions)
-    return dataset_bow, questions_bow, word_to_id, word_id
+    return dataset_seq, dataset_bow, questions_bow, word_to_id, word_id
 
 def compute_bow(input_str, word_to_id, num_words):
     bow = np.zeros((num_words,))
@@ -73,7 +74,14 @@ def compute_bow(input_str, word_to_id, num_words):
         bow[word_to_id[token]] += 1
     return bow
 
+def compute_seq(input_str, word_to_id, num_words):
+    seq = []
+    for token in input_str.split():
+        seq.append(word_to_id[token])
+    return seq
+
 def transform_ques(question, word_to_id, num_words):
+    question.append(compute_seq(question[2], word_to_id, num_words))
     question[2] = compute_bow(question[2], word_to_id, num_words)
     return question
 
