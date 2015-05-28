@@ -367,6 +367,7 @@ if __name__ == "__main__":
 
     memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=0.1, word_to_id=word_to_id)
     memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
+    #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions)
     #memNN.predict(train_dataset, train_questions)
     memNN.predict(test_dataset_seq, test_dataset_bow, test_questions)
