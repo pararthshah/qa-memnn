@@ -97,7 +97,7 @@ class MemNN:
         grads = T.grad(cost, params)
 
         # Parameter updates
-        updates = self.get_updates(params, grads, method='adagrad')
+        updates = self.get_updates(params, grads, method='adadelta')
 
         l_rate = T.scalar('l_rate')
 
