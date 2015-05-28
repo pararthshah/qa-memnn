@@ -95,16 +95,12 @@ class MemNN:
             self.L, self.Lprime
         ]
 
-        gradient = T.grad(cost, params)
-
-        l_rate = T.scalar('l_rate')
+        grads = T.grad(cost, params)
 
         # Parameter updates
-        updates=[]
-        for param, gparam in zip(params, gradient):
-            param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
-            updates.append((param, param - param_update * l_rate))
-            updates.append((param_update, self.momentum*param_update + (1. - self.momentum)*gparam))
+        updates = self.get_updates(params, grads, method='adagrad')
+
+        l_rate = T.scalar('l_rate')
 
         # Theano functions
         self.train_function = theano.function(
@@ -125,6 +121,54 @@ class MemNN:
 
         score_o = self.calc_score_o(phi_x, phi_f)
         self.predict_function_o = theano.function(inputs = [phi_x, phi_f], outputs = score_o)
+
+    def get_updates(self, params, grads, method=None, **kwargs):
+        self.rho = 0.95
+        self.epsilon = 1e-6
+
+        accumulators = [shared_zeros(p.get_value().shape) for p in params]
+        updates=[]
+
+        if method == 'adadelta':
+            print "Using ADADELTA"
+            delta_accumulators = [shared_zeros(p.get_value().shape) for p in params]
+            for p, g, a, d_a in zip(params, grads, accumulators, delta_accumulators):
+                new_a = self.rho * a + (1 - self.rho) * g ** 2 # update accumulator
+                updates.append((a, new_a))
+
+                # use the new accumulator and the *old* delta_accumulator
+                update = g * T.sqrt(d_a + self.epsilon) / T.sqrt(new_a + self.epsilon)
+
+                new_p = p - self.lr * update
+                updates.append((p, new_p)) # apply constraints
+
+                # update delta_accumulator
+                new_d_a = self.rho * d_a + (1 - self.rho) * update ** 2
+                updates.append((d_a, new_d_a))
+
+
+        elif method == 'adam':
+            # unimplemented
+            print "Using ADAM"
+
+        elif method == 'adagrad':
+            print "Using ADAGRAD"
+            for p, g, a in zip(params, grads, accumulators):
+                new_a = a + g ** 2 # update accumulator
+                updates.append((a, new_a))
+
+                new_p = p - self.lr * g / T.sqrt(new_a + self.epsilon)
+                updates.append((p, new_p)) # apply constraints
+
+        else: # Default
+            print "Using MOMENTUM"
+            l_rate = kwargs['l_rate']
+            for param, gparam in zip(params, gradient):
+                param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
+                updates.append((param, param - param_update * l_rate))
+                updates.append((param_update, self.momentum*param_update + (1. - self.momentum)*gparam))
+
+        return updates
 
     def _step(self,
         xi_t, xf_t, xc_t, xo_t,
@@ -296,8 +340,7 @@ class MemNN:
                 words = np.asarray(dataset_seq[article_no][index_m0] + dataset_seq[article_no][index_m1] + question_seq)
 
                 cost = self.train_function(phi_x, phi_f1_1, phi_f1_2, phi_f2_1, phi_f2_2,
-                                           phi_m0, r, words,
-                                           l_rate)
+                                           phi_m0, r, words)
                 #print "%d: %f" % (i, cost)
                 costs.append(cost)
 
