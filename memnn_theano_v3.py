@@ -127,16 +127,9 @@ class MemNN:
         self.predict_function_o = theano.function(inputs = [phi_x, phi_f], outputs = score_o)
 
     def _step(self,
-        x,
+        xi_t, xf_t, xc_t, xo_t,
         h_tm1, c_tm1,
-        u_i, u_f, u_o, u_c,
-        w_i, w_f, w_o, w_c,
-        b_i, b_f, b_o, b_c):
-
-        xi_t = T.dot(x, w_i) + b_i
-        xf_t = T.dot(x, w_f) + b_f
-        xc_t = T.dot(x, w_c) + b_c
-        xo_t = T.dot(x, w_o) + b_o
+        u_i, u_f, u_o, u_c):
 
         i_t = hard_sigmoid(xi_t + T.dot(h_tm1, u_i))
         f_t = hard_sigmoid(xf_t + T.dot(h_tm1, u_f))
@@ -150,18 +143,20 @@ class MemNN:
         x = self.L[words]
 
         # Each element of x is (word_embed,) shape
+        xi = T.dot(x, self.W_i) + self.b_i
+        xf = T.dot(x, self.W_f) + self.b_f
+        xc = T.dot(x, self.W_c) + self.b_c
+        xo = T.dot(x, self.W_o) + self.b_o
 
         [outputs, memories], updates = theano.scan(
             self._step,
-            sequences=[x],
+            sequences=[xi, xf, xc, xo],
             outputs_info=[
                 alloc_zeros_matrix(self.n_lstm_embed),
                 alloc_zeros_matrix(self.n_lstm_embed),
             ],
             non_sequences=[
                 self.U_i, self.U_f, self.U_o, self.U_c,
-                self.W_i, self.W_f, self.W_o, self.W_c,
-                self.b_i, self.b_f, self.b_o, self.b_c,
             ],
             truncate_gradient=-1
         )
@@ -371,7 +366,7 @@ if __name__ == "__main__":
         n_epochs = 10
 
     memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=0.1, word_to_id=word_to_id)
-    #memNN.train(train_dataset, train_questions, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005)]))
-    memNN.train(train_dataset_seq, train_dataset_bow, train_questions)
+    memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
+    #memNN.train(train_dataset_seq, train_dataset_bow, train_questions)
     #memNN.predict(train_dataset, train_questions)
     memNN.predict(test_dataset_seq, test_dataset_bow, test_questions)
