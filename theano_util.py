@@ -48,7 +48,7 @@ def parse_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True):
                         lines += str(stmt_to_line[stmt]) + ' '
                     lines = lines.strip()
                 else:
-                    lines = stmt_to_line[question_parts[2]]
+                    lines = str(stmt_to_line[question_parts[2]])
 
                 questions.append([article_no, line_no, ' '.join(tokens[1:]), word_to_id[question_parts[1]], lines])
             else:

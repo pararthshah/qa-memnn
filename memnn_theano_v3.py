@@ -335,7 +335,7 @@ class MemNN:
                     fake_correct_answers += 1
 
             predicted = self.find_word(x, m0, m1)
-            print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
+            # print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
             if predicted == correct:
                 correct_answers += 1
             else:
@@ -356,6 +356,6 @@ if __name__ == "__main__":
         n_epochs = 10
 
     memNN = MemNN(n_words=num_words, n_embedding=100, lr=0.01, n_epochs=n_epochs, margin=0.1, word_to_id=word_to_id)
-    # memNN.train(train_dataset, train_questions, lr_schedule=dict([(0, 0.01), (20, 0.005), (50, 0.001)]))
+    memNN.train(train_dataset, train_questions, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005)]))
     memNN.train(train_dataset, train_questions)
     memNN.predict(test_dataset, test_questions)
