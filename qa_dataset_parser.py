@@ -1,46 +1,56 @@
-import numpy as np
 import re
-import theano
 
-dtype=theano.config.floatX
+from theano_util import *
 
-def init_shared_normal(num_rows, num_cols, scale=1):
-    '''Initialize a matrix shared variable with normally distributed
-    elements.'''
-    return theano.shared(np.random.normal(
-        scale=scale, size=(num_rows, num_cols)).astype(dtype))
-
-def init_shared_zeros(*shape):
-    '''Initialize a vector shared variable with zero elements.'''
-    return theano.shared(np.zeros(shape, dtype=dtype))
-
-def compute_bow(input_str, word_to_id, num_words):
-    bow = np.zeros((num_words,))
-    for token in input_str.split():
-        bow[word_to_id[token]] += 1
-    return bow
-
-def compute_seq(input_str, word_to_id, num_words):
-    seq = []
-    for token in input_str.split():
-        seq.append(word_to_id[token])
-    return seq
-
-def transform_ques(question, word_to_id, num_words):
-    question.append(compute_seq(question[2], word_to_id, num_words))
-    question[2] = compute_bow(question[2], word_to_id, num_words)
-    return question
-
-def parse_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True):
+def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []
     questions = []
-    with open(input_file) as f:
+    with open(input_dir + '/question_answer_pairs.txt') as f:
         statements = []
         article_no = 0
         line_no = 0
         stmt_to_line = {}
         for line in f:
+            # Skip first line
+            if 'ArticleFile' in line:
+                continue
+
             line = line.strip()
+
+            # Skip empty lines
+            if len(line) == 0:
+                continue
+
+            parts = line.split('\t')
+            if len(parts) != 6:
+                print("Malformed line: " + line)
+                continue
+
+            question = parts[1]
+            answer = parts[2]
+            article_name = parts[5]
+
+            # There are other fields in the dataset, use them later if you want
+
+            # This dataset has repeated questions. What to do?
+
+            # Don't answer questions with more than 1 word answers
+            if len(answer.split(' ')) > 1:
+                # Skip for now
+                continue
+
+            question_parts = question.split('\t')
+            tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0].strip()).split()
+            if update_word_ids:
+                for token in (tokens + [answer]):
+                    if token not in word_to_id:
+                        word_to_id[token] = word_id
+                        word_id += 1
+
+            # Get all statements in the dataset for this question
+
+            ######## Need to change things below this.
+
             if len(line) > 0 and line[:2] == '1 ' and len(statements) > 0: # new article
                 dataset.append(statements)
                 statements = []
@@ -84,3 +94,4 @@ def parse_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True):
     dataset_seq = map(lambda y: map(lambda x: compute_seq(x, word_to_id, word_id), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, word_id), questions)
     return dataset_seq, dataset_bow, questions_bow, word_to_id, word_id
+
