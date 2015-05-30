@@ -7,6 +7,9 @@ from theano_util import *
 from keras.activations import tanh, hard_sigmoid
 from keras.initializations import glorot_uniform, orthogonal
 from keras.utils.theano_utils import shared_zeros, alloc_zeros_matrix
+from keras.preprocessing import sequence
+
+theano.config.exception_verbosity = 'high'
 
 class WMemNN:
     def __init__(self, n_words, n_embedding=100, lr=0.01, momentum=0.9, word_to_id=None):
@@ -76,7 +79,7 @@ class WMemNN:
             outputs = cost,
             updates = updates,
             allow_input_downcast=True,
-            #mode='FAST_COMPILE'
+            mode='FAST_COMPILE'
             #mode='DebugMode'
         )
 
@@ -84,7 +87,7 @@ class WMemNN:
             inputs = [
                 x, q
             ],
-            outputs = cost,
+            outputs = memory_cost,
             allow_input_downcast=True
         )
 
@@ -126,20 +129,20 @@ class WMemNN:
 
         # Layer 1
         p = T.nnet.softmax(T.dot(memories[0], u1))
-        p = T.repeat(T.reshape(p, (p.shape[0], 1)), memories[1].shape[0])
-        o1 = T.sum(T.dot(p, memories[1]), axis=0)
+        co = p[0] * memories[1]
+        o1 = T.sum(co, axis=0)
 
         # Layer 2
         u2 = o1 + u1
-        p = T.nnet.softmax(T.dot(memories[2], u2))
-        p = T.repeat(T.reshape(p, (p.shape[0], 1)), memories[3].shape[0])
-        o2 = T.sum(T.dot(p, memories[3]), axis=0)
+        p = T.nnet.softmax(T.dot(memories[1], u2))
+        co = p[0] * memories[2]
+        o2 = T.sum(co, axis=0)
 
         # Layer 3
         u3 = o2 + u2
-        p = T.nnet.softmax(T.dot(memories[4], u3))
-        p = T.repeat(T.reshape(p, (p.shape[0], 1)), memories[5].shape[0])
-        o3 = T.sum(T.dot(p, memories[5]), axis=0)
+        p = T.nnet.softmax(T.dot(memories[2], u3))
+        co = p[0] * memories[3]
+        o3 = T.sum(co, axis=0)
 
         # Final
         output = T.nnet.softmax(T.dot(self.W, o3 + u3))
@@ -159,8 +162,8 @@ class WMemNN:
                 article_no = question[0]
                 article = dataset[article_no]
                 line_no = question[1]
-                statements_seq = question[2][:-1]
-                question_seq = question[2][-1]
+                statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
+                question_seq = np.asarray(question[2][-1])
 
                 if line_no <= 1:
                     continue
@@ -168,7 +171,11 @@ class WMemNN:
                 # Correct word
                 correct_word = question[3]
 
-                cost = self.train_function(statements_seq, question_seq, correct_word)
+                cost = self.train_function(
+                    statements_seq,
+                    question_seq,
+                    correct_word
+                )
 
                 #print "%d: %f" % (i, cost)
                 costs.append(cost)
@@ -182,12 +189,12 @@ class WMemNN:
             article_no = question[0]
             article = dataset[article_no]
             line_no = question[1]
-            statements_seq = question[2][:-1]
-            question_seq = question[2][-1]
+            statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
+            question_seq = np.asarray(question[2][-1])
             correct = question[3]
 
             predicted = self.predict_function(
-                np.asarray(statements_seq), np.asarray(question_seq)
+                statements_seq, question_seq
             )
             # print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
             if predicted == correct:
