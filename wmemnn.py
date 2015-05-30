@@ -194,7 +194,7 @@ class WMemNN:
                 statements_seq, question_seq
             )
             # print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
-            if predicted == correct:
+            if np.argmax(predicted) == correct:
                 correct_answers += 1
             else:
                 wrong_answers += 1
