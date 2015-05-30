@@ -79,7 +79,7 @@ class WMemNN:
             outputs = cost,
             updates = updates,
             allow_input_downcast=True,
-            mode='FAST_COMPILE'
+            #mode='FAST_COMPILE'
             #mode='DebugMode'
         )
 
@@ -128,24 +128,21 @@ class WMemNN:
         u1 = T.sum(self.B[question], axis=0)
 
         # Layer 1
-        p = T.nnet.softmax(T.dot(memories[0], u1))
-        co = p[0] * memories[1]
-        o1 = T.sum(co, axis=0)
+        p = T.nnet.softmax(T.dot(u1, memories[0].T))
+        o1 = T.dot(p, memories[1])
 
         # Layer 2
         u2 = o1 + u1
-        p = T.nnet.softmax(T.dot(memories[1], u2))
-        co = p[0] * memories[2]
-        o2 = T.sum(co, axis=0)
+        p = T.nnet.softmax(T.dot(u2, memories[1].T))
+        o2 = T.dot(p, memories[2])
 
         # Layer 3
         u3 = o2 + u2
-        p = T.nnet.softmax(T.dot(memories[2], u3))
-        co = p[0] * memories[3]
-        o3 = T.sum(co, axis=0)
+        p = T.nnet.softmax(T.dot(u3, memories[2].T))
+        o3 = T.dot(p, memories[3])
 
         # Final
-        output = T.nnet.softmax(T.dot(self.W, o3 + u3))
+        output = T.nnet.softmax(T.dot(o3 + u3, self.W))
 
         return output[0]
 
