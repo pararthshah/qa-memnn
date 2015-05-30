@@ -110,7 +110,7 @@ def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=Tru
                             word_to_id[token] = word_id
                             word_id += 1
 
-                questions.append([article_no, line_no, ' '.join(statements[:line_no] + tokens[1:]), question_parts[1]])
+                questions.append([article_no, line_no, statements[:line_no] + [tokens[1:]], question_parts[1]])
             else:
                 tokens = re.sub(r'([\.\?])$', r' \1', line).split()
                 stmt_to_line[tokens[0]] = line_no
@@ -119,7 +119,7 @@ def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=Tru
                         if token not in word_to_id:
                             word_to_id[token] = word_id
                             word_id += 1
-                statements.append(' '.join(tokens[1:]))
+                statements.append(tokens[1:])
                 line_no += 1
         if len(statements) > 0:
             dataset.append(statements)
@@ -127,7 +127,11 @@ def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=Tru
     return dataset, questions_seq, word_to_id, word_id
 
 def transform_ques_weak(question, word_to_id, num_words):
-    question[2] = compute_seq(question[2], word_to_id, num_words)
+    indices = []
+    for stmt in question[2]:
+        index_stmt = map(lambda x: word_to_id[x], stmt)
+        indices.append(index_stmt)
+    question[2] = indices
     question[3] = word_to_id[question[3]]
     return question
 
@@ -138,6 +142,6 @@ if __name__ == "__main__":
     train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
     test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
-    # each element of train_questions contains: [article_no, line_no, [indices of statements and question], index of answer word]
+    # each element of train_questions contains: [article_no, line_no, [lists of indices of statements and question], index of answer word]
     print train_questions[0] 
 
