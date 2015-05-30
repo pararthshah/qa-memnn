@@ -395,6 +395,57 @@ class MemNN:
 
         print '%d correct, %d wrong, %d fake_correct' % (correct_answers, wrong_answers, fake_correct_answers)
 
+    def train_weak(self, dataset, questions, n_epochs=100, lr_schedule=None):
+        l_rate = self.lr
+        for epoch in xrange(n_epochs):
+            costs = []
+
+            if lr_schedule != None and epoch in lr_schedule:
+                l_rate = lr_schedule[epoch]
+
+            random.shuffle(questions)
+            for i, question in enumerate(questions):
+                article_no = question[0]
+                article = dataset[article_no]
+                line_no = question[1]
+                statements_seq = question[2][:-1]
+                question_seq = question[2][-1]
+
+                if line_no <= 1:
+                    continue
+
+                # Correct word
+                correct_word = question[3]
+                
+                cost = self.train_function(statements_seq, question_seq, correct_word)
+
+                #print "%d: %f" % (i, cost)
+                costs.append(cost)
+
+            print "Epoch %d: %f" % (epoch, np.mean(costs))
+
+    def predict_weak(self, dataset, questions):
+        correct_answers = 0
+        wrong_answers = 0
+        for i, question in enumerate(questions):
+            article_no = question[0]
+            article = dataset[article_no]
+            line_no = question[1]
+            statements_seq = question[2][:-1]
+            question_seq = question[2][-1]
+            correct = question[3]
+
+            predicted = self.predict_function(
+                np.asarray(statements_seq), np.asarray(question_seq)
+            )
+            # print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
+            if predicted == correct:
+                correct_answers += 1
+            else:
+                wrong_answers += 1
+
+        print '%d correct, %d wrong' % (correct_answers, wrong_answers)
+
 if __name__ == "__main__":
     train_file = sys.argv[1]
     test_file = train_file.replace('train', 'test')

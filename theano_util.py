@@ -1,5 +1,5 @@
 import numpy as np
-import re
+import re, sys
 import theano
 
 dtype=theano.config.floatX
@@ -134,3 +134,63 @@ def parse_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True):
     dataset_seq = map(lambda y: map(lambda x: compute_seq(x, word_to_id, word_id), y), dataset)
     questions_bow = map(lambda x: transform_ques(x, word_to_id, word_id), questions)
     return dataset_seq, dataset_bow, questions_bow, word_to_id, word_id
+
+def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=True):
+    dataset = []
+    questions = []
+    with open(input_file) as f:
+        statements = []
+        article_no = 0
+        line_no = 0
+        stmt_to_line = {}
+        for line in f:
+            line = line.strip()
+            if len(line) > 0 and line[:2] == '1 ' and len(statements) > 0: # new article
+                dataset.append(statements)
+                statements = []
+                line_no = 0
+                stmt_to_line = {}
+                article_no += 1
+            if '\t' in line:
+                question_parts = line.split('\t')
+                tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0].strip()).split()
+                if update_word_ids:
+                    for token in tokens[1:]:
+                        if token not in word_to_id:
+                            word_to_id[token] = word_id
+                            word_id += 1
+
+                questions.append([article_no, line_no, statements[:line_no] + [tokens[1:]], question_parts[1]])
+            else:
+                tokens = re.sub(r'([\.\?])$', r' \1', line).split()
+                stmt_to_line[tokens[0]] = line_no
+                if update_word_ids:
+                    for token in tokens[1:]:
+                        if token not in word_to_id:
+                            word_to_id[token] = word_id
+                            word_id += 1
+                statements.append(tokens[1:])
+                line_no += 1
+        if len(statements) > 0:
+            dataset.append(statements)
+    questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
+    return dataset, questions_seq, word_to_id, word_id
+
+def transform_ques_weak(question, word_to_id, num_words):
+    indices = []
+    for stmt in question[2]:
+        index_stmt = map(lambda x: word_to_id[x], stmt)
+        indices.append(index_stmt)
+    question[2] = indices
+    question[3] = word_to_id[question[3]]
+    return question
+
+if __name__ == "__main__":
+    train_file = sys.argv[1]
+    test_file = train_file.replace('train', 'test')
+
+    train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
+    test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+
+    # each element of train_questions contains: [article_no, line_no, [lists of indices of statements and question], index of answer word]
+    print train_questions[0]
