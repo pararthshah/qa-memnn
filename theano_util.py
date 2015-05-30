@@ -1,6 +1,8 @@
 import numpy as np
 import re, sys
 import theano
+import theano.tensor as T
+from keras.utils.theano_utils import shared_zeros
 
 dtype=theano.config.floatX
 
@@ -23,7 +25,6 @@ def init_shared_zeros(*shape):
 def get_param_updates(params, grads, lr, method=None, **kwargs):
     rho = 0.95
     epsilon = 1e-6
-    momentum = kwargs['momentum']
 
     accumulators = [shared_zeros(p.get_value().shape) for p in params]
     updates=[]
@@ -61,6 +62,7 @@ def get_param_updates(params, grads, lr, method=None, **kwargs):
 
     else: # Default
         print "Using MOMENTUM"
+        momentum = kwargs['momentum']
         l_rate = kwargs['l_rate']
         for param, gparam in zip(params, gradient):
             param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)

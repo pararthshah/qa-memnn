@@ -22,7 +22,7 @@ class WMemNN:
         x = T.imatrix('x')
 
         # Question
-        q = T.vector('q')
+        q = T.ivector('q')
 
         # True word
         r = T.iscalar('r')
@@ -38,10 +38,10 @@ class WMemNN:
         # self.A3 = self.C2
         # self.C3 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
         # self.weights = [
-        #     self.A1, 
-        #     self.C1, 
+        #     self.A1,
+        #     self.C1,
         #     #self.A2,
-        #     self.C2, 
+        #     self.C2,
         #     #self.A3,
         #     self.C3
         # ]
@@ -49,17 +49,18 @@ class WMemNN:
 
         # Final outut weight matrix
         self.W = init_shared_normal(self.n_embedding, self.n_words, 0.01)
-    
-        memnn_cost = self.memnn_cost(x, q)
-        memnn_cost = -T.log(memnn_cost[r]) # cross entropy on softmax
 
-        cost = self.memnn_cost
+        memory_cost = self.memnn_cost(x, q)
+        memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
+
+        cost = memory_loss
 
         params = [
             self.B,
-            self.A1, self.C1,
-            self.C2,
-            self.C3,
+            self.weights,
+            #self.A1, self.C1,
+            #self.C2,
+            #self.C3,
             self.W,
         ]
 
@@ -67,7 +68,7 @@ class WMemNN:
 
         # Parameter updates
         updates = get_param_updates(params, grads, lr=self.lr, method='adagrad')
-        
+
         self.train_function = theano.function(
             inputs = [
                 x, q, r
@@ -86,12 +87,12 @@ class WMemNN:
             outputs = cost,
             allow_input_downcast=True
         )
-            
+
     def add_statement(self, statement, memories):
         # statement: question as a series of indices
         # memories: List of 6 lists, each is a list of memories
         # Append to memories?
-        
+
         for i in range(len(self.weights)):
             z = T.sum(self.weights[i][statement], axis=0)
             memories[i] = T.stacklists([memories[i], [z]])
@@ -101,17 +102,12 @@ class WMemNN:
     def _compute_memories(self, statement, previous, weights):
         memories = T.sum(weights[statement], axis=0)
         return memories
-                
-        # m1 = T.sum(weights[0][statement], axis=0)
-        # m2 = T.sum(weights[1][statement], axis=0)
-        # m4 = T.sum(weights[2][statement], axis=0)
-        # m6 = T.sum(weights[3][statement], axis=0)
 
     def memnn_cost(self, statements, question):
         # statements: list of list of word indices
         # question: list of word indices
-        
-        [computed_memories, hidden_state], updates = theano.scan(
+
+        computed_memories, updates = theano.scan(
             self._compute_memories,
             sequences = [statements],
             outputs_info = [
@@ -122,34 +118,34 @@ class WMemNN:
             ],
             truncate_gradient = -1,
         )
-        
+
         memories = T.stacklists(computed_memories).dimshuffle(1, 0, 2)
-        
+
         # Embed question
-        u1 = T.sum(self.B[words], axis=0)
-        
+        u1 = T.sum(self.B[question], axis=0)
+
         # Layer 1
         p = T.nnet.softmax(T.dot(memories[0], u1))
         p = T.repeat(T.reshape(p, (p.shape[0], 1)), memories[1].shape[0])
         o1 = T.sum(T.dot(p, memories[1]), axis=0)
-        
+
         # Layer 2
         u2 = o1 + u1
         p = T.nnet.softmax(T.dot(memories[2], u2))
         p = T.repeat(T.reshape(p, (p.shape[0], 1)), memories[3].shape[0])
         o2 = T.sum(T.dot(p, memories[3]), axis=0)
-        
+
         # Layer 3
         u3 = o2 + u2
         p = T.nnet.softmax(T.dot(memories[4], u3))
         p = T.repeat(T.reshape(p, (p.shape[0], 1)), memories[5].shape[0])
         o3 = T.sum(T.dot(p, memories[5]), axis=0)
-        
+
         # Final
         output = T.nnet.softmax(T.dot(self.W, o3 + u3))
 
-        return output
-    
+        return output[0]
+
     def train(self, dataset, questions, n_epochs=100, lr_schedule=None):
         l_rate = self.lr
         for epoch in xrange(n_epochs):
@@ -171,9 +167,9 @@ class WMemNN:
 
                 # Correct word
                 correct_word = question[3]
-                
+
                 cost = self.train_function(statements_seq, question_seq, correct_word)
-                
+
                 #print "%d: %f" % (i, cost)
                 costs.append(cost)
 
