@@ -19,7 +19,7 @@ class WMemNN:
         self.id_to_word = dict((v, k) for k, v in word_to_id.iteritems())
 
         # Statement
-        x = T.vector('x')
+        x = T.imatrix('x')
 
         # Question
         q = T.vector('q')
@@ -31,20 +31,21 @@ class WMemNN:
         self.B = init_shared_normal(self.n_words, self.n_embedding, 0.01)
 
         # Statement input, output embeddings
-        self.A1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        self.C1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        self.A2 = self.C1
-        self.C2 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        self.A3 = self.C2
-        self.C3 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        self.weights = [
-            self.A1, 
-            self.C1, 
-            #self.A2,
-            self.C2, 
-            #self.A3,
-            self.C3
-        ]
+        # self.A1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
+        # self.C1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
+        # self.A2 = self.C1
+        # self.C2 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
+        # self.A3 = self.C2
+        # self.C3 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
+        # self.weights = [
+        #     self.A1, 
+        #     self.C1, 
+        #     #self.A2,
+        #     self.C2, 
+        #     #self.A3,
+        #     self.C3
+        # ]
+        self.weights = init_shared_normal_tensor(4, self.n_words, self.n_embedding, 0.01)
 
         # Final outut weight matrix
         self.W = init_shared_normal(self.n_embedding, self.n_words, 0.01)
@@ -97,16 +98,14 @@ class WMemNN:
 
         return memories
 
-    def _compute_memories(self, statement, previous_memory, weights):
+    def _compute_memories(self, statement, previous, weights):
         memories = T.sum(weights[statement], axis=0)
         return memories
                 
         # m1 = T.sum(weights[0][statement], axis=0)
         # m2 = T.sum(weights[1][statement], axis=0)
-        # m4 = T.sum(weights[3][statement], axis=0)
-        # m6 = T.sum(weights[5][statement], axis=0)
-        
-        # return m1, m2, m4, m6
+        # m4 = T.sum(weights[2][statement], axis=0)
+        # m6 = T.sum(weights[3][statement], axis=0)
 
     def memnn_cost(self, statements, question):
         # statements: list of list of word indices
@@ -116,7 +115,7 @@ class WMemNN:
             self._compute_memories,
             sequences = [statements],
             outputs_info = [
-                alloc_zeros_matrix(len(self.weights), self.n_embedding)
+                alloc_zeros_matrix(self.weights.shape[0], self.n_embedding)
             ],
             non_sequences = [
                 self.weights.dimshuffle(1, 0, 2),
@@ -124,7 +123,7 @@ class WMemNN:
             truncate_gradient = -1,
         )
         
-        memories = computed_memories.dimshuffle(1, 0, 2)
+        memories = T.stacklists(computed_memories).dimshuffle(1, 0, 2)
         
         # Embed question
         u1 = T.sum(self.B[words], axis=0)

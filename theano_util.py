@@ -10,6 +10,12 @@ def init_shared_normal(num_rows, num_cols, scale=1):
     return theano.shared(np.random.normal(
         scale=scale, size=(num_rows, num_cols)).astype(dtype))
 
+def init_shared_normal_tensor(num_slices, num_rows, num_cols, scale=1):
+    '''Initialize a matrix shared variable with normally distributed
+    elements.'''
+    return theano.shared(np.random.normal(
+        scale=scale, size=(num_slices, num_rows, num_cols)).astype(dtype))
+
 def init_shared_zeros(*shape):
     '''Initialize a vector shared variable with zero elements.'''
     return theano.shared(np.zeros(shape, dtype=dtype))
