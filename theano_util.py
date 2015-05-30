@@ -63,10 +63,9 @@ def get_param_updates(params, grads, lr, method=None, **kwargs):
     else: # Default
         print "Using MOMENTUM"
         momentum = kwargs['momentum']
-        l_rate = kwargs['l_rate']
-        for param, gparam in zip(params, gradient):
+        for param, gparam in zip(params, grads):
             param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
-            updates.append((param, param - param_update * l_rate))
+            updates.append((param, param - param_update * lr))
             updates.append((param_update, momentum*param_update + (1. - momentum)*gparam))
 
     return updates

@@ -70,7 +70,7 @@ class WMemNN:
         grads = T.grad(cost, params)
 
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=self.lr, method='adagrad')
+        updates = get_param_updates(params, grads, lr=self.lr, method='adagrad', momentum=0.9)
 
         self.train_function = theano.function(
             inputs = [
@@ -190,13 +190,15 @@ class WMemNN:
             question_seq = np.asarray(question[2][-1])
             correct = question[3]
 
-            predicted = self.predict_function(
+            probs = self.predict_function(
                 statements_seq, question_seq
             )
-            # print 'Correct: %s (%d), Guess: %s (%d)' % (self.id_to_word[correct], correct, self.id_to_word[predicted], predicted)
-            if np.argmax(predicted) == correct:
+            predicted = np.argmax(probs)
+
+            if predicted == correct:
                 correct_answers += 1
             else:
+                #print 'Correct: %s (%d %.3f), Guess: %s (%d %.3f)' % (self.id_to_word[correct], correct, probs[correct], self.id_to_word[predicted], predicted, probs[predicted])
                 wrong_answers += 1
 
         print '%d correct, %d wrong' % (correct_answers, wrong_answers)
@@ -220,6 +222,6 @@ if __name__ == "__main__":
     #memNN.predict(train_dataset, train_questions)
     #memNN.predict(test_dataset_seq, test_dataset_bow, test_questions)
 
-    for i in xrange(20):
+    for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, n_epochs=5)
         wmemNN.predict(test_dataset, test_questions)
