@@ -31,7 +31,7 @@ class WMemNN:
         r = T.iscalar('r')
 
         # Question embedding
-        self.B = init_shared_normal(self.n_words, self.n_embedding, 0.01)
+        self.B = glorot_uniform((self.n_words, self.n_embedding))
 
         # Statement input, output embeddings
         # self.A1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
@@ -48,10 +48,13 @@ class WMemNN:
         #     #self.A3,
         #     self.C3
         # ]
-        self.weights = init_shared_normal_tensor(4, self.n_words, self.n_embedding, 0.01)
+        self.weights = glorot_uniform((4, self.n_words, self.n_embedding))
 
         # Final outut weight matrix
-        self.W = init_shared_normal(self.n_embedding, self.n_words, 0.01)
+        self.W = glorot_uniform((self.n_embedding, self.n_words))
+
+        # Linear mapping between layers
+        self.H = glorot_uniform((self.n_embedding, self.n_embedding))
 
         memory_cost = self.memnn_cost(x, q)
         memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
@@ -65,6 +68,7 @@ class WMemNN:
             #self.C2,
             #self.C3,
             self.W,
+            self.H,
         ]
 
         grads = T.grad(cost, params)
@@ -132,12 +136,12 @@ class WMemNN:
         o1 = T.dot(p, memories[1])
 
         # Layer 2
-        u2 = o1 + u1
+        u2 = o1 + T.dot(u1, self.H)
         p = T.nnet.softmax(T.dot(u2, memories[1].T))
         o2 = T.dot(p, memories[2])
 
         # Layer 3
-        u3 = o2 + u2
+        u3 = o2 + T.dot(u2, self.H)
         p = T.nnet.softmax(T.dot(u3, memories[2].T))
         o3 = T.dot(p, memories[3])
 
@@ -224,4 +228,5 @@ if __name__ == "__main__":
 
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, n_epochs=5)
+        wmemNN.predict(train_dataset, train_questions)
         wmemNN.predict(test_dataset, test_questions)
