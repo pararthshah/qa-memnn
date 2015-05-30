@@ -14,6 +14,56 @@ def init_shared_zeros(*shape):
     '''Initialize a vector shared variable with zero elements.'''
     return theano.shared(np.zeros(shape, dtype=dtype))
 
+def get_param_updates(params, grads, lr, method=None, **kwargs):
+    rho = 0.95
+    epsilon = 1e-6
+    momentum = kwargs['momentum']
+
+    accumulators = [shared_zeros(p.get_value().shape) for p in params]
+    updates=[]
+
+    if method == 'adadelta':
+        print "Using ADADELTA"
+        delta_accumulators = [shared_zeros(p.get_value().shape) for p in params]
+        for p, g, a, d_a in zip(params, grads, accumulators, delta_accumulators):
+            new_a = rho * a + (1 - rho) * g ** 2 # update accumulator
+            updates.append((a, new_a))
+
+            # use the new accumulator and the *old* delta_accumulator
+            update = g * T.sqrt(d_a + epsilon) / T.sqrt(new_a + epsilon)
+
+            new_p = p - lr * update
+            updates.append((p, new_p)) # apply constraints
+
+            # update delta_accumulator
+            new_d_a = rho * d_a + (1 - rho) * update ** 2
+            updates.append((d_a, new_d_a))
+
+
+    elif method == 'adam':
+        # unimplemented
+        print "Using ADAM"
+
+    elif method == 'adagrad':
+        print "Using ADAGRAD"
+        for p, g, a in zip(params, grads, accumulators):
+            new_a = a + g ** 2 # update accumulator
+            updates.append((a, new_a))
+
+            new_p = p - lr * g / T.sqrt(new_a + epsilon)
+            updates.append((p, new_p)) # apply constraints
+
+    else: # Default
+        print "Using MOMENTUM"
+        l_rate = kwargs['l_rate']
+        for param, gparam in zip(params, gradient):
+            param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
+            updates.append((param, param - param_update * l_rate))
+            updates.append((param_update, momentum*param_update + (1. - momentum)*gparam))
+
+    return updates
+
+
 def compute_bow(input_str, word_to_id, num_words):
     bow = np.zeros((num_words,))
     for token in input_str.split():
