@@ -189,6 +189,8 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
     return dataset, questions_seq, word_to_id, word_id
 
+import cPickle
+
 if __name__ == "__main__":
     train_file = sys.argv[1]
 
@@ -199,3 +201,9 @@ if __name__ == "__main__":
     import pprint
     pprint.pprint(word_to_id)
     print num_words
+
+    # Pickle!!!!
+    print("Pickling...")
+    f = file(train_file + '/dataset.pickle', 'wb')
+    cPickle.dump((train_dataset, train_questions, word_to_id, num_words), f, protocol=cPickle.HIGHEST_PROTOCOL)
+    f.close()

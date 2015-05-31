@@ -205,8 +205,16 @@ if __name__ == "__main__":
     train_file = sys.argv[1]
     test_file = train_file.replace('train', 'test')
 
-    train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
-    #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    train_dataset, train_questions, word_to_id, num_words = None, None, None, None
+
+    # Check for pickled dataset
+    if '.pickle' in train_file:
+        f = file(train_file, 'rb')
+        obj = cPickle.load(f)
+        train_dataset, train_questions, word_to_id, num_words = obj
+    else:
+        train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
+        #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     if len(sys.argv) > 2:
         n_epochs = int(sys.argv[2])
