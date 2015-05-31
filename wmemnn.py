@@ -12,6 +12,7 @@ from keras.preprocessing import sequence
 from qa_dataset_parser import parse_qa_dataset
 
 theano.config.exception_verbosity = 'high'
+theano.config.allow_gc = False
 #theano.config.profile = True
 
 def inspect_inputs(i, node, fn):
