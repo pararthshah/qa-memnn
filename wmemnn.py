@@ -209,7 +209,9 @@ if __name__ == "__main__":
 
     # Check for pickled dataset
     if '.pickle' in train_file:
+        print("Loading pickled dataset")
         f = file(train_file, 'rb')
+        import cPickle
         obj = cPickle.load(f)
         train_dataset, train_questions, word_to_id, num_words = obj
     else:
