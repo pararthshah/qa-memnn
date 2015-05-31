@@ -13,6 +13,12 @@ from qa_dataset_parser import parse_qa_dataset
 
 theano.config.exception_verbosity = 'high'
 
+def inspect_inputs(i, node, fn):
+    print i, node, "inputs:", [input[0] for input in fn.inputs],
+
+def inspect_outputs(i, node, fn):
+    print i, node, "outputs:", [output[0] for output in fn.outputs]
+
 class WMemNN:
     def __init__(self, n_words, n_embedding=100, lr=0.01, momentum=0.9, word_to_id=None):
         self.n_embedding = n_embedding
@@ -87,6 +93,7 @@ class WMemNN:
             allow_input_downcast=True,
             #mode='FAST_COMPILE'
             #mode='DebugMode'
+            #mode=theano.compile.MonitorMode(pre_func=inspect_inputs,post_func=inspect_outputs)
         )
 
         self.predict_function = theano.function(
@@ -96,17 +103,6 @@ class WMemNN:
             outputs = memory_cost,
             allow_input_downcast=True
         )
-
-    def add_statement(self, statement, memories):
-        # statement: question as a series of indices
-        # memories: List of 6 lists, each is a list of memories
-        # Append to memories?
-
-        for i in range(len(self.weights)):
-            z = T.sum(self.weights[i][statement], axis=0)
-            memories[i] = T.stacklists([memories[i], [z]])
-
-        return memories
 
     def _compute_memories(self, statement, previous, weights):
         memories = T.sum(weights[statement], axis=0)
@@ -168,7 +164,7 @@ class WMemNN:
                 statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
                 question_seq = np.asarray(question[2][-1])
 
-                if line_no <= 1:
+                if line_no <= 1 and line_no != -1:
                     continue
 
                 # Correct word
@@ -180,7 +176,7 @@ class WMemNN:
                     correct_word
                 )
 
-                #print "%d: %f" % (i, cost)
+                print "Epoch %d, sample %d: %f" % (epoch, i, cost)
                 costs.append(cost)
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
@@ -206,6 +202,9 @@ class WMemNN:
             else:
                 #print 'Correct: %s (%d %.3f), Guess: %s (%d %.3f)' % (self.id_to_word[correct], correct, probs[correct], self.id_to_word[predicted], predicted, probs[predicted])
                 wrong_answers += 1
+
+            if len(questions) > 1000:
+                print '(%d/%d) %d correct, %d wrong' % (i+1, len(questions), correct_answers, wrong_answers)
 
         print '%d correct, %d wrong' % (correct_answers, wrong_answers)
 

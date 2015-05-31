@@ -2,9 +2,15 @@ import re
 
 from theano_util import *
 
+def get_sentences(line):
+    s = re.sub(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', ' ', line)
+    return line
+
 def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []
     questions = []
+
+    article_files = set()
     with open(input_dir + '/question_answer_pairs.txt') as f:
         for line in f:
             # Skip first line
@@ -37,6 +43,7 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
 
             question_parts = question.split('\t')
             tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0].strip()).split()
+            tokens = map(lambda x: x.lower(), tokens)
             question_tokens = tokens
             if update_word_ids:
                 for token in (tokens + [answer]):
@@ -44,17 +51,27 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
                         word_to_id[token] = word_id
                         word_id += 1
 
-            # Get all statements in the dataset for this question
+            article_no = len(questions)
 
             article_file = input_dir + '/' + article_name + '.txt'
+            article_files.add(article_file)
+            questions.append([article_no, article_file, [question_tokens], answer])
 
-            s_file = open(article_file)
-            statements = []
-            for statement in s_file:
-                if len(statement.strip()) == 0:
-                    continue
+    article_data = {}
+    for article_file in article_files:
+        # Get all statements in the dataset for this question
 
-                tokens = re.sub(r'([\.\?])$', r' \1', statement.strip()).split()
+        s_file = open(article_file)
+        statements = []
+        for statement in s_file:
+            if len(statement.strip()) == 0:
+                continue
+
+            sentences = get_sentences(statement.strip())
+
+            for sentence in sentences:
+                tokens = re.sub(r'([\.\?])$', r' \1', sentence.strip()).split()
+                tokens = map(lambda x: x.lower(), tokens)
 
                 if len(tokens) == 0:
                     continue
@@ -67,12 +84,11 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
                             word_to_id[token] = word_id
                             word_id += 1
 
-            article_no = len(dataset)
-            if len(statements) == 0:
-                continue
+        article_data[article_file] = statements
 
-            dataset.append(statements)
-            questions.append([article_no, -1, statements + [question_tokens], answer])
+    for question in questions:
+        question[2] = article_data[question[1]] + question[2]
+        question[1] = -1
 
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
     return dataset, questions_seq, word_to_id, word_id
@@ -84,4 +100,4 @@ if __name__ == "__main__":
     #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     # each element of train_questions contains: [article_no, line_no, [lists of indices of statements and question], index of answer word]
-    print train_questions[0]
+    print num_words
