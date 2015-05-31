@@ -6,10 +6,6 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []
     questions = []
     with open(input_dir + '/question_answer_pairs.txt') as f:
-        statements = []
-        article_no = 0
-        line_no = 0
-        stmt_to_line = {}
         for line in f:
             # Skip first line
             if 'ArticleFile' in line:
@@ -41,6 +37,7 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
 
             question_parts = question.split('\t')
             tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0].strip()).split()
+            question_tokens = tokens
             if update_word_ids:
                 for token in (tokens + [answer]):
                     if token not in word_to_id:
@@ -49,49 +46,42 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
 
             # Get all statements in the dataset for this question
 
-            ######## Need to change things below this.
+            article_file = input_dir + '/' + article_name + '.txt'
 
-            if len(line) > 0 and line[:2] == '1 ' and len(statements) > 0: # new article
-                dataset.append(statements)
-                statements = []
-                line_no = 0
-                stmt_to_line = {}
-                article_no += 1
-            if '\t' in line:
-                question_parts = line.split('\t')
-                tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0].strip()).split()
+            s_file = open(article_file)
+            statements = []
+            for statement in s_file:
+                if len(statement.strip()) == 0:
+                    continue
+
+                tokens = re.sub(r'([\.\?])$', r' \1', statement.strip()).split()
+
+                if len(tokens) == 0:
+                    continue
+
+                article = tokens
+                statements.append(article)
                 if update_word_ids:
-                    for token in tokens[1:]:
+                    for token in tokens:
                         if token not in word_to_id:
                             word_to_id[token] = word_id
                             word_id += 1
 
-                # To handle the case of "3 6"
-                lines = None
-                if ' ' in question_parts[2]:
-                    stmts = question_parts[2].split(' ')
-                    lines = ''
-                    for stmt in stmts:
-                        lines += str(stmt_to_line[stmt]) + ' '
-                    lines = lines.strip()
-                else:
-                    lines = str(stmt_to_line[question_parts[2]])
+            article_no = len(dataset)
+            if len(statements) == 0:
+                continue
 
-                questions.append([article_no, line_no, ' '.join(tokens[1:]), word_to_id[question_parts[1]], lines])
-            else:
-                tokens = re.sub(r'([\.\?])$', r' \1', line).split()
-                stmt_to_line[tokens[0]] = line_no
-                if update_word_ids:
-                    for token in tokens[1:]:
-                        if token not in word_to_id:
-                            word_to_id[token] = word_id
-                            word_id += 1
-                statements.append(' '.join(tokens[1:]))
-                line_no += 1
-        if len(statements) > 0:
             dataset.append(statements)
-    dataset_bow = map(lambda y: map(lambda x: compute_bow(x, word_to_id, word_id), y), dataset)
-    dataset_seq = map(lambda y: map(lambda x: compute_seq(x, word_to_id, word_id), y), dataset)
-    questions_bow = map(lambda x: transform_ques(x, word_to_id, word_id), questions)
-    return dataset_seq, dataset_bow, questions_bow, word_to_id, word_id
+            questions.append([article_no, -1, statements + [question_tokens], answer])
 
+    questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
+    return dataset, questions_seq, word_to_id, word_id
+
+if __name__ == "__main__":
+    train_file = sys.argv[1]
+
+    train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
+    #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+
+    # each element of train_questions contains: [article_no, line_no, [lists of indices of statements and question], index of answer word]
+    print train_questions[0]

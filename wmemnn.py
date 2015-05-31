@@ -9,6 +9,8 @@ from keras.initializations import glorot_uniform, orthogonal
 from keras.utils.theano_utils import shared_zeros, alloc_zeros_matrix
 from keras.preprocessing import sequence
 
+from qa_dataset_parser import parse_qa_dataset
+
 theano.config.exception_verbosity = 'high'
 
 class WMemNN:
@@ -211,14 +213,15 @@ if __name__ == "__main__":
     train_file = sys.argv[1]
     test_file = train_file.replace('train', 'test')
 
-    train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
-    test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
+    #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     if len(sys.argv) > 2:
         n_epochs = int(sys.argv[2])
     else:
         n_epochs = 10
 
+    print "Dataset has %d words" % num_words
     wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
@@ -229,4 +232,4 @@ if __name__ == "__main__":
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, n_epochs=5)
         wmemNN.predict(train_dataset, train_questions)
-        wmemNN.predict(test_dataset, test_questions)
+        #wmemNN.predict(test_dataset, test_questions)
