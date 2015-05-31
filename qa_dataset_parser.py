@@ -190,11 +190,19 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     return dataset, questions_seq, word_to_id, word_id
 
 import cPickle
+import random
 
 if __name__ == "__main__":
     train_file = sys.argv[1]
 
     train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
+    test_dataset = train_dataset
+    all_questions = train_questions
+    random.shuffle(all_questions)
+    train_samples = int(0.6 * len(all_questions))
+    train_questions = all_questions[:train_samples]
+    test_questions = all_questions[train_samples:]
+
     #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     # each element of train_questions contains: [article_no, line_no, [lists of indices of statements and question], index of answer word]
@@ -203,7 +211,12 @@ if __name__ == "__main__":
     print num_words
 
     # Pickle!!!!
-    print("Pickling...")
-    f = file(train_file + '/dataset.pickle', 'wb')
+    print("Pickling train...")
+    f = file(train_file + '/dataset.train.pickle', 'wb')
     cPickle.dump((train_dataset, train_questions, word_to_id, num_words), f, protocol=cPickle.HIGHEST_PROTOCOL)
+    f.close()
+
+    print("Pickling test...")
+    f = file(train_file + '/dataset.test.pickle', 'wb')
+    cPickle.dump((test_dataset, test_questions, word_to_id, num_words), f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()
