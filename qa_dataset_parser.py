@@ -3,8 +3,8 @@ import re
 from theano_util import *
 
 def get_sentences(line):
-    s = re.sub(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', ' ', line)
-    return line
+    s = re.sub(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', '\t', line)
+    return s.split('\t')
 
 def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []

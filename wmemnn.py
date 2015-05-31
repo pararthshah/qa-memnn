@@ -12,6 +12,7 @@ from keras.preprocessing import sequence
 from qa_dataset_parser import parse_qa_dataset
 
 theano.config.exception_verbosity = 'high'
+#theano.config.profile = True
 
 def inspect_inputs(i, node, fn):
     print i, node, "inputs:", [input[0] for input in fn.inputs],
@@ -158,14 +159,8 @@ class WMemNN:
 
             random.shuffle(questions)
             for i, question in enumerate(questions):
-                article_no = question[0]
-                article = dataset[article_no]
-                line_no = question[1]
                 statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
                 question_seq = np.asarray(question[2][-1])
-
-                if line_no <= 1 and line_no != -1:
-                    continue
 
                 # Correct word
                 correct_word = question[3]
@@ -185,9 +180,6 @@ class WMemNN:
         correct_answers = 0
         wrong_answers = 0
         for i, question in enumerate(questions):
-            article_no = question[0]
-            article = dataset[article_no]
-            line_no = question[1]
             statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
             question_seq = np.asarray(question[2][-1])
             correct = question[3]
