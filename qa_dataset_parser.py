@@ -2,9 +2,33 @@ import re
 
 from theano_util import *
 
+import pdb
+
+def only_words(line):
+    ps = re.sub(r'[^a-zA-Z0-9]', r' ', line)
+    ws = re.sub(r'(\W)', r' \1 ', ps) # Put spaces around punctuations
+    ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
+    hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
+    rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
+    return rs
+
+def clean_sentence(line):
+    ps = re.sub(r'[^a-zA-Z0-9_\.\?\!]', ' ', line) # Split on punctuations and hex characters
+    ws = re.sub(r'(\W)', r' \1 ', ps) # Put spaces around punctuations
+    ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
+    hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
+    rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
+    return rs
+
 def get_sentences(line):
-    s = re.sub(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', '\t', line)
-    return s.split('\t')
+    ps = re.sub(r'[^a-zA-Z0-9_\.\?\!]', ' ', line) # Split on punctuations and hex characters
+    s = re.sub(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s', '\t', ps) # Split on sentences
+    ws = re.sub(r'(\W)', r' \1 ', s) # Put spaces around punctuations
+    ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
+    hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
+    rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
+
+    return rs.split('\t')
 
 def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []
@@ -30,6 +54,8 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
 
             question = parts[1]
             answer = parts[2]
+            answer = only_words(answer).strip().lower()
+
             article_name = parts[5]
 
             # There are other fields in the dataset, use them later if you want
@@ -37,12 +63,13 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
             # This dataset has repeated questions. What to do?
 
             # Don't answer questions with more than 1 word answers
-            if len(answer.split(' ')) > 1:
+            if len(answer) == 0 or len(answer.split(' ')) > 1:
                 # Skip for now
                 continue
 
             question_parts = question.split('\t')
-            tokens = re.sub(r'([\.\?])$', r' \1', question_parts[0].strip()).split()
+            tokens = clean_sentence(question_parts[0]).strip().split()
+            tokens = filter(lambda x: len(x.strip()) > 0, tokens)
             tokens = map(lambda x: x.lower(), tokens)
             question_tokens = tokens
             if update_word_ids:
@@ -53,7 +80,7 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
 
             article_no = len(questions)
 
-            article_file = input_dir + '/' + article_name + '.txt'
+            article_file = input_dir + '/' + article_name + '.txt.clean'
             article_files.add(article_file)
             questions.append([article_no, article_file, [question_tokens], answer])
 
@@ -70,11 +97,9 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
             sentences = get_sentences(statement.strip())
 
             for sentence in sentences:
-                tokens = re.sub(r'([\.\?])$', r' \1', sentence.strip()).split()
+                tokens = sentence.strip().split()
+                tokens = filter(lambda x: len(x.strip()) > 0, tokens)
                 tokens = map(lambda x: x.lower(), tokens)
-
-                if len(tokens) == 0:
-                    continue
 
                 article = tokens
                 statements.append(article)
@@ -100,4 +125,6 @@ if __name__ == "__main__":
     #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     # each element of train_questions contains: [article_no, line_no, [lists of indices of statements and question], index of answer word]
+    import pprint
+    pprint.pprint(word_to_id)
     print num_words
