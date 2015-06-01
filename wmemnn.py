@@ -220,6 +220,7 @@ if __name__ == "__main__":
         import cPickle
         obj = cPickle.load(f)
         test_dataset, test_questions, word_to_id, num_words = obj
+
     else:
         #train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
         train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
