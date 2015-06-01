@@ -12,7 +12,7 @@ from keras.preprocessing import sequence
 from qa_dataset_parser import parse_qa_dataset
 
 theano.config.exception_verbosity = 'high'
-theano.config.allow_gc = False
+# theano.config.allow_gc = False
 #theano.config.profile = True
 
 def inspect_inputs(i, node, fn):
@@ -33,6 +33,9 @@ class WMemNN:
 
         # Statement
         x = T.imatrix('x')
+
+        # Positional encoding matrix
+        pe = T.matrix('pe')
 
         # Question
         q = T.ivector('q')
@@ -66,7 +69,7 @@ class WMemNN:
         # Linear mapping between layers
         self.H = glorot_uniform((self.n_embedding, self.n_embedding))
 
-        memory_cost = self.memnn_cost(x, q)
+        memory_cost = self.memnn_cost(x, q, pe)
         memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
 
         cost = memory_loss
@@ -88,7 +91,7 @@ class WMemNN:
 
         self.train_function = theano.function(
             inputs = [
-                x, q, r
+                x, q, r, pe
             ],
             outputs = cost,
             updates = updates,
@@ -100,17 +103,24 @@ class WMemNN:
 
         self.predict_function = theano.function(
             inputs = [
-                x, q
+                x, q, pe
             ],
             outputs = memory_cost,
             allow_input_downcast=True
         )
 
-    def _compute_memories(self, statement, previous, weights):
-        memories = T.sum(weights[statement], axis=0)
+    def _compute_memories(self, statement, previous, weights, pe_matrix):
+        memories = T.sum(pe_matrix * weights[statement], axis=0)
         return memories
 
-    def memnn_cost(self, statements, question):
+    def get_PE_matrix(self, num_words, embedding_size):
+        pe_matrix = np.zeros((num_words, embedding_size))
+        for j in range(num_words):
+            for k in range(embedding_size):
+                pe_matrix[j,k] = (1 - float(j+1)/num_words) - (float(k+1)/embedding_size) * (1 - 2*float(j+1)/num_words)
+        return pe_matrix
+
+    def memnn_cost(self, statements, question, pe_matrix):
         # statements: list of list of word indices
         # question: list of word indices
 
@@ -122,6 +132,7 @@ class WMemNN:
             ],
             non_sequences = [
                 self.weights.dimshuffle(1, 0, 2),
+                pe_matrix
             ],
             truncate_gradient = -1,
         )
@@ -163,13 +174,18 @@ class WMemNN:
                 statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
                 question_seq = np.asarray(question[2][-1])
 
+                pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
+
+                print statements_seq.shape, pe_matrix.shape
+
                 # Correct word
                 correct_word = question[3]
 
                 cost = self.train_function(
                     statements_seq,
                     question_seq,
-                    correct_word
+                    correct_word,
+                    pe_matrix
                 )
 
                 print "Epoch %d, sample %d: %f" % (epoch, i, cost)
@@ -185,8 +201,10 @@ class WMemNN:
             question_seq = np.asarray(question[2][-1])
             correct = question[3]
 
+            pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
+
             probs = self.predict_function(
-                statements_seq, question_seq
+                statements_seq, question_seq, pe_matrix
             )
             predicted = np.argmax(probs)
 
@@ -205,8 +223,9 @@ if __name__ == "__main__":
     train_file = sys.argv[1]
     test_file = train_file.replace('train', 'test')
 
-    train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
-    #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    # train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
+    train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
+    test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     if len(sys.argv) > 2:
         n_epochs = int(sys.argv[2])
@@ -224,4 +243,4 @@ if __name__ == "__main__":
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, n_epochs=5)
         wmemNN.predict(train_dataset, train_questions)
-        #wmemNN.predict(test_dataset, test_questions)
+        wmemNN.predict(test_dataset, test_questions)
