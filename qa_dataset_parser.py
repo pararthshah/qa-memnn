@@ -92,6 +92,19 @@ def canonicalize_tokens(tokens):
         canonical_tokens.append(t)
     return canonical_tokens
 
+def prune_statements(questions):
+    for i in range(len(questions)):
+        new_statements = []
+        old_statements = questions[i][1]
+
+        # Idea 1
+        # Use word vectors and keep only the top 5
+
+
+
+        questions[i][1] = new_statements
+        print("Question: ", questions[i][2], " before %d after %d" % (len(old_statements), len(new_statements)))
+
 def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []
     questions = []
@@ -132,11 +145,18 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
                 # Skip for now
                 continue
 
+            if not update_word_ids and answer not in word_to_id:
+                continue
+
             question_parts = question.split('\t')
             tokens = clean_sentence(question_parts[0]).strip().split()
             tokens = filter(lambda x: len(x.strip()) > 0, tokens)
             tokens = map(lambda x: x.lower(), tokens)
             tokens = canonicalize_tokens(tokens)
+
+            if not update_word_ids:
+                tokens = filter(lambda x: x in word_to_id, tokens)
+
             question_tokens = tokens
             if update_word_ids:
                 for token in (tokens + [answer]):
@@ -148,6 +168,7 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
 
             article_file = input_dir + '/' + article_name + '.txt.clean'
             article_files.add(article_file)
+            dataset.append(question_tokens)
             questions.append([article_no, article_file, [question_tokens], answer])
 
     article_data = {}
@@ -170,8 +191,12 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
                 tokens = map(lambda x: x.lower(), tokens)
                 tokens = canonicalize_tokens(tokens)
 
+                if not update_word_ids:
+                    tokens = filter(lambda x: x in word_to_id, tokens)
+
                 article = tokens
                 statements.append(article)
+                dataset.append(article)
                 if update_word_ids:
                     for token in tokens:
                         if token not in word_to_id:
@@ -181,29 +206,53 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
         article_data[article_file] = statements
 
     print("Mapping articles to statements...")
-    for question in questions:
+    print("There are %d questions before deduplication" % len(questions))
+    question_set = set()
+    for i in xrange(len(questions)):
+        question = questions[i]
+        question_tuple = tuple(question[2][0])
+        if question_tuple in question_set:
+            question[0] = None
+            continue
+
+        question_set.add(question_tuple)
         question[2] = article_data[question[1]] + question[2]
         question[1] = -1
+
+    questions = filter(lambda x: x[0] is not None, questions)
+    print("There are %d questions after deduplication" % len(questions))
+
+    #print("Trying to prune extraneaous statements...")
+    #questions = prune_statements(questions)
 
     print("Final processing...")
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
     return dataset, questions_seq, word_to_id, word_id
 
 import cPickle
+import random
 
 if __name__ == "__main__":
     train_file = sys.argv[1]
+    test_file = sys.argv[2]
 
     train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
+    test_dataset, test_questions, word_to_id, num_words = parse_qa_dataset(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+
     #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     # each element of train_questions contains: [article_no, line_no, [lists of indices of statements and question], index of answer word]
-    import pprint
-    pprint.pprint(word_to_id)
+    #import pprint
+    #pprint.pprint(word_to_id)
     print num_words
 
     # Pickle!!!!
-    print("Pickling...")
-    f = file(train_file + '/dataset.pickle', 'wb')
+    print("Pickling train...")
+    f = file(train_file + '/dataset.train.pickle', 'wb')
     cPickle.dump((train_dataset, train_questions, word_to_id, num_words), f, protocol=cPickle.HIGHEST_PROTOCOL)
+    f.close()
+
+    print("Pickling test...")
+    f = file(test_file + '/dataset.test.pickle', 'wb')
+    cPickle.dump((test_dataset, test_questions, word_to_id, num_words), f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()

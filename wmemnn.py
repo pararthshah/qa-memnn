@@ -188,7 +188,7 @@ class WMemNN:
                     pe_matrix
                 )
 
-                print "Epoch %d, sample %d: %f" % (epoch, i, cost)
+                #print "Epoch %d, sample %d: %f" % (epoch, i, cost)
                 costs.append(cost)
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
@@ -230,22 +230,24 @@ if __name__ == "__main__":
 
     mode = 'babi' # babi or wiki
 
+    if '.pickle' in train_file:
+        mode = 'wiki'
+
     if mode == 'babi':
         train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
         test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
     else:
         # Check for pickled dataset
-        if '.pickle' in train_file:
-            print("Loading pickled dataset")
-            f = file(train_file, 'rb')
-            import cPickle
-            obj = cPickle.load(f)
-            train_dataset, train_questions, word_to_id, num_words = obj
-        else:
-            train_dataset, train_questions, word_to_id, num_words = parse_qa_dataset(train_file)
-            #test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+        print("Loading pickled train dataset")
+        f = file(train_file, 'rb')
+        import cPickle
+        obj = cPickle.load(f)
+        train_dataset, train_questions, word_to_id, num_words = obj
 
-    
+        print("Loading pickled test dataset")
+        f = file(test_file, 'rb')
+        obj = cPickle.load(f)
+        test_dataset, test_questions, word_to_id, num_words = obj
 
     print "Dataset has %d words" % num_words
     wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)
@@ -253,5 +255,4 @@ if __name__ == "__main__":
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, n_epochs=5)
         wmemNN.predict(train_dataset, train_questions)
-        if mode == 'babi':
-            wmemNN.predict(test_dataset, test_questions)
+        wmemNN.predict(test_dataset, test_questions)
