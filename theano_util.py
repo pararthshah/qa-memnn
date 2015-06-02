@@ -26,6 +26,12 @@ def make_batches(size, batch_size):
     nb_batch = int(np.ceil(size/float(batch_size)))
     return [(i*batch_size, min(size, (i+1)*batch_size)) for i in range(0, nb_batch)]
 
+def maxnorm_constraint(p, m=40):
+    norms = T.sqrt(T.sum(T.sqr(p)))
+    desired = T.clip(norms, 0, m)
+    p = p * (desired / (1e-7 + norms))
+    return p
+
 def get_param_updates(params, grads, lr, method=None, **kwargs):
     rho = 0.95
     epsilon = 1e-6
@@ -33,44 +39,55 @@ def get_param_updates(params, grads, lr, method=None, **kwargs):
     accumulators = [shared_zeros(p.get_value().shape) for p in params]
     updates=[]
 
+    if 'constraint' in kwargs:
+        constraint = kwargs['constraint']
+    else:
+        constraint = None
+
     if method == 'adadelta':
         print "Using ADADELTA"
         delta_accumulators = [shared_zeros(p.get_value().shape) for p in params]
         for p, g, a, d_a in zip(params, grads, accumulators, delta_accumulators):
             new_a = rho * a + (1 - rho) * g ** 2 # update accumulator
-            updates.append((a, new_a))
 
             # use the new accumulator and the *old* delta_accumulator
             update = g * T.sqrt(d_a + epsilon) / T.sqrt(new_a + epsilon)
-
             new_p = p - lr * update
-            updates.append((p, new_p)) # apply constraints
-
+            
             # update delta_accumulator
             new_d_a = rho * d_a + (1 - rho) * update ** 2
+
+            updates.append((p, new_p)) 
+            updates.append((a, new_a))
             updates.append((d_a, new_d_a))
-
-
-    elif method == 'adam':
-        # unimplemented
-        print "Using ADAM"
 
     elif method == 'adagrad':
         print "Using ADAGRAD"
         for p, g, a in zip(params, grads, accumulators):
             new_a = a + g ** 2 # update accumulator
-            updates.append((a, new_a))
-
+            
             new_p = p - lr * g / T.sqrt(new_a + epsilon)
             updates.append((p, new_p)) # apply constraints
+            updates.append((a, new_a))
 
-    else: # Default
+    elif method == 'momentum': # Default
         print "Using MOMENTUM"
         momentum = kwargs['momentum']
         for param, gparam in zip(params, grads):
             param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
             updates.append((param, param - param_update * lr))
             updates.append((param_update, momentum*param_update + (1. - momentum)*gparam))
+
+    else: # Default
+        print "Using DEFAULT"
+        for param, gparam in zip(params, grads):
+            param_update = maxnorm_constraint(gparam)
+            updates.append((param, param - param_update * lr))
+
+    # apply constraints on self.weights update
+    # assumes that updates[0] corresponds to self.weights param
+    if constraint != None:
+        updates[0] = (updates[0][0], constraint(updates[0][0]))
 
     return updates
 
@@ -146,9 +163,32 @@ def parse_dataset(input_file, word_id=0, word_to_id={}, update_word_ids=True):
     questions_bow = map(lambda x: transform_ques(x, word_to_id, word_id), questions)
     return dataset_seq, dataset_bow, questions_bow, word_to_id, word_id
 
-def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=True):
+def pad_statement(stmt, null_word, max_words=20):
+    if len(stmt) >= max_words:
+        return stmt[-max_words:]
+    else:
+        return stmt + [null_word for i in range(max_words - len(stmt))]
+
+def pad_memories(stmts, null_word, max_stmts=20, max_words=20):
+    if len(stmts) >= max_words:
+        return stmts[-max_stmts:]
+    else:
+
+        return stmts + [[null_word for j in range(max_words)] for i in range(max_stmts - len(stmts))]
+
+def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=True, max_stmts=20, max_words=20):
     dataset = []
     questions = []
+    null_word = '<NULL>'
+    if null_word not in word_to_id:
+        if update_word_ids == True:
+            word_to_id[null_word] = word_id
+            word_id += 1
+        else:
+            print "Null word not found!! AAAAA"
+            sys.exit(1)
+    null_word_id = word_to_id[null_word]
+
     with open(input_file) as f:
         statements = []
         article_no = 0
@@ -171,7 +211,9 @@ def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=Tru
                             word_to_id[token] = word_id
                             word_id += 1
 
-                questions.append([article_no, line_no, statements[:line_no] + [tokens[1:]], question_parts[1]])
+                padded_stmts = pad_memories(statements[:line_no], null_word, max_stmts, max_words)
+                padded_ques = pad_statement(tokens[1:], null_word, max_words)
+                questions.append([article_no, line_no, padded_stmts, padded_ques, question_parts[1]])
             else:
                 tokens = re.sub(r'([\.\?])$', r' \1', line).split()
                 stmt_to_line[tokens[0]] = line_no
@@ -180,12 +222,12 @@ def parse_dataset_weak(input_file, word_id=0, word_to_id={}, update_word_ids=Tru
                         if token not in word_to_id:
                             word_to_id[token] = word_id
                             word_id += 1
-                statements.append(tokens[1:])
+                statements.append(pad_statement(tokens[1:], null_word, max_words))
                 line_no += 1
         if len(statements) > 0:
             dataset.append(statements)
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
-    return dataset, questions_seq, word_to_id, word_id
+    return dataset, questions_seq, word_to_id, word_id, null_word_id
 
 def transform_ques_weak(question, word_to_id, num_words):
     indices = []
@@ -193,7 +235,8 @@ def transform_ques_weak(question, word_to_id, num_words):
         index_stmt = map(lambda x: word_to_id[x], stmt)
         indices.append(index_stmt)
     question[2] = indices
-    question[3] = word_to_id[question[3]]
+    question[3] = map(lambda x: word_to_id[x], stmt)
+    question[4] = word_to_id[question[4]]
     return question
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ def inspect_outputs(i, node, fn):
     print i, node, "outputs:", [output[0] for output in fn.outputs]
 
 class WMemNN:
-    def __init__(self, n_words, n_embedding=100, lr=0.01, momentum=0.9, word_to_id=None):
+    def __init__(self, n_words, n_embedding=100, lr=0.01, momentum=0.9, word_to_id=None, null_word_id=-1):
         self.regularization = 0.001
         self.n_embedding = n_embedding
         self.lr = lr
@@ -32,6 +32,9 @@ class WMemNN:
 
         self.word_to_id = word_to_id
         self.id_to_word = dict((v, k) for k, v in word_to_id.iteritems())
+        self.null_word_id = null_word_id
+
+        zero_vector = T.vector('zv', dtype=theano.config.floatX)
 
         # Statement
         x = T.imatrix('x')
@@ -49,7 +52,7 @@ class WMemNN:
         rbatch = T.ivector('rb')
 
         # Question embedding
-        self.B = glorot_uniform((self.n_words, self.n_embedding))
+        self.B = init_shared_normal(self.n_words, self.n_embedding, 0.1)
 
         # Statement input, output embeddings
         # self.A1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
@@ -66,24 +69,22 @@ class WMemNN:
         #     #self.A3,
         #     self.C3
         # ]
-        self.weights = glorot_uniform((4, self.n_words, self.n_embedding))
+        # self.weights = glorot_uniform((4, self.n_words, self.n_embedding))
+        self.weights = init_shared_normal_tensor(4, self.n_words, self.n_embedding, 0.1)
 
         # Final outut weight matrix
-        self.W = glorot_uniform((self.n_embedding, self.n_words))
+        self.W = init_shared_normal(self.n_embedding, self.n_words, 0.1)
 
         # Linear mapping between layers
-        self.H = glorot_uniform((self.n_embedding, self.n_embedding))
+        self.H = init_shared_normal(self.n_embedding, self.n_embedding, 0.1)
 
         memory_cost = self.memnn_cost(x, q, pe)
         # memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
         memory_loss = self.memnn_batch_cost(xbatch, qbatch, rbatch, pe)
 
         params = [
-            self.B,
             self.weights,
-            #self.A1, self.C1,
-            #self.C2,
-            #self.C3,
+            self.B,
             self.W,
             self.H,
         ]
@@ -100,17 +101,19 @@ class WMemNN:
         l_rate = T.scalar('l_rate')
 
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=l_rate, method='momentum', momentum=0.9)
+        updates = get_param_updates(params, grads, lr=l_rate, method='default', momentum=0.9, 
+            constraint=self._constrain_embedding(self.null_word_id, zero_vector))
 
         self.train_function = theano.function(
             inputs = [
                 xbatch, qbatch, rbatch, pe,
-                theano.Param(l_rate)
+                theano.Param(l_rate, default=self.lr),
+                theano.Param(zero_vector, default=np.zeros((self.n_embedding,)))
             ],
             outputs = cost,
             updates = updates,
             allow_input_downcast=True,
-            mode='FAST_COMPILE',
+            # mode='FAST_COMPILE',
             #mode='DebugMode'
             #mode=theano.compile.MonitorMode(pre_func=inspect_inputs,post_func=inspect_outputs)
             on_unused_input='warn'
@@ -122,17 +125,23 @@ class WMemNN:
             ],
             outputs = memory_cost,
             allow_input_downcast=True,
-            on_unused_input='warn',
-            mode='FAST_COMPILE'
+            # mode='FAST_COMPILE',
+            on_unused_input='warn'
         )
 
-    def _compute_memories(self, statement, previous, weights): #, pe_matrix):
-        pe_weights = weights[statement] # pe_matrix * 
+    def _constrain_embedding(self, null_id, zero_vector):
+        def wrapper(p):
+            for i in range(4):
+                p = T.set_subtensor(p[i,null_id], zero_vector)
+            return p
+        return wrapper
+
+    def _compute_memories(self, statement, previous, weights, pe_matrix):
+        pe_weights = pe_matrix * weights[statement]
         memories = T.sum(pe_weights, axis=0)
-        # memories = T.sum(weights[statement], axis=0)
         return memories
 
-    def get_PE_matrix(self, num_words, embedding_size):
+    def _get_PE_matrix(self, num_words, embedding_size):
         pe_matrix = np.zeros((num_words, 4, embedding_size))
         for j in range(num_words):
             for k in range(embedding_size):
@@ -141,15 +150,15 @@ class WMemNN:
                     pe_matrix[j,i,k] = value
         return pe_matrix
 
-    def memnn_batch_cost(self, statements_batch, question_batch, r_batch): #, pe_matrix):
+    def memnn_batch_cost(self, statements_batch, question_batch, r_batch, pe_matrix):
         l = statements_batch.shape[0]
         s, _ = theano.scan(fn=lambda i, c, xb, qb, rb, pe: c - T.log(self.memnn_cost(xb[i], qb[i], pe)[rb[i]]),
                            outputs_info=T.as_tensor_variable(np.asarray(0, theano.config.floatX)),
-                           non_sequences=[statements_batch, question_batch, r_batch), #, pe_matrix],
+                           non_sequences=[statements_batch, question_batch, r_batch, pe_matrix],
                            sequences=[theano.tensor.arange(l, dtype='int64')])
-        return s[-1] / l
+        return s[-1]
 
-    def memnn_cost(self, statements, question): #, pe_matrix):
+    def memnn_cost(self, statements, question, pe_matrix):
         # statements: list of list of word indices
         # question: list of word indices
 
@@ -160,8 +169,8 @@ class WMemNN:
                 alloc_zeros_matrix(self.weights.shape[0], self.n_embedding)
             ],
             non_sequences = [
-                self.weights.dimshuffle(1, 0, 2)
-                # pe_matrix
+                self.weights.dimshuffle(1, 0, 2),
+                pe_matrix
             ],
             truncate_gradient = -1,
         )
@@ -190,9 +199,13 @@ class WMemNN:
 
         return output[0]
 
-    def train(self, dataset, questions, n_epochs=100, lr_schedule=None, start_epoch=0):
+    def train(self, dataset, questions, n_epochs=100, lr_schedule=None, start_epoch=0, max_words=20):
         l_rate = self.lr
         index_array = np.arange(len(questions))
+
+        # (max_words, )
+        pe_matrix = self._get_PE_matrix(max_words, self.n_embedding)
+
         for epoch in xrange(start_epoch, start_epoch + n_epochs):
             costs = []
 
@@ -209,21 +222,23 @@ class WMemNN:
                 questions_batch = []
                 for index in batch_ids:
                     questions_batch.append(questions[index])
-                statements_seq_batch = np.asarray(map(lambda x: sequence.pad_sequences(x[2][:-1]), questions_batch))
-                question_seq_batch = np.asarray(map(lambda x: x[2][-1], questions_batch))
-                correct_word_batch = np.asarray(map(lambda x: x[3], questions_batch))
 
-                # pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
+                # (batch_size * max_stmts * max_words)
+                statements_seq_batch = np.asarray(map(lambda x: x[2], questions_batch))
+                # (batch_size * max_words)
+                question_seq_batch = np.asarray(map(lambda x: x[3], questions_batch))
+                # (batch_size)
+                correct_word_batch = np.asarray(map(lambda x: x[4], questions_batch))
 
                 cost = self.train_function(
                     statements_seq_batch,
                     question_seq_batch,
                     correct_word_batch,
-                    # pe_matrix,
+                    pe_matrix,
                     l_rate
                 )
 
-                #print "Epoch %d, sample %d: %f" % (epoch, i, cost)
+                # print "Epoch %d, sample %d: %f" % (epoch, i, cost)
                 costs.append(cost)
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
@@ -232,9 +247,9 @@ class WMemNN:
         correct_answers = 0
         wrong_answers = 0
         for i, question in enumerate(questions):
-            statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
-            question_seq = np.asarray(question[2][-1])
-            correct = question[3]
+            statements_seq = np.asarray(question[2])
+            question_seq = np.asarray(question[3])
+            correct = question[4]
 
             pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
 
@@ -273,33 +288,38 @@ if __name__ == "__main__":
     if '.pickle' in train_file:
         mode = 'wiki'
 
-    if mode == 'babi':
-        train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
-        test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
-    elif mode == 'wiki':
-        # Check for pickled dataset
-        print("Loading pickled train dataset")
-        f = file(train_file, 'rb')
-        import cPickle
-        obj = cPickle.load(f)
-        train_dataset, train_questions, word_to_id, num_words = obj
+    max_stmts = 20
+    max_words = 20
 
-        print("Loading pickled test dataset")
-        f = file(test_file, 'rb')
-        obj = cPickle.load(f)
-        test_dataset, test_questions, word_to_id, num_words = obj
-    elif mode == 'debug':
-        train_dataset = []
-        train_questions = [[0, 2, [[0, 1, 2, 3, 4, 5], [6, 7, 2, 3, 8, 5], [9, 10, 0, 11]], 4]]
-        num_words = 12
-        word_to_id = {}
+    # if mode == 'babi':
+    train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
+    test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    # elif mode == 'wiki':
+    #     # Check for pickled dataset
+    #     print("Loading pickled train dataset")
+    #     f = file(train_file, 'rb')
+    #     import cPickle
+    #     obj = cPickle.load(f)
+    #     train_dataset, train_questions, word_to_id, num_words = obj
+
+    #     print("Loading pickled test dataset")
+    #     f = file(test_file, 'rb')
+    #     obj = cPickle.load(f)
+    #     test_dataset, test_questions, word_to_id, num_words = obj
+    # elif mode == 'debug':
+    #     train_dataset = []
+    #     train_questions = [[0, 2, [[0, 1, 2, 3, 4, 5], [6, 7, 2, 3, 8, 5], [9, 10, 0, 11]], 4]]
+    #     num_words = 12
+    #     word_to_id = {}
 
     # print "Dataset has %d words" % num_words
-    wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)
+    wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id, null_word_id=null_word_id)
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
 
+    lr_schedule = dict([(0, 0.01), (25, 0.01/2), (50, 0.01/4), (75, 0.01/8)])
+
     for i in xrange(n_epochs/5):
-        wmemNN.train(train_dataset, train_questions, n_epochs=5, start_epoch=5*i, lr_schedule=dict([(0, 0.01), (25, 0.01/2), (50, 0.01/4), (75, 0.01/8)]))
+        wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
         wmemNN.predict(train_dataset, train_questions)
         wmemNN.predict(test_dataset, test_questions)
