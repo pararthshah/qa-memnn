@@ -28,21 +28,25 @@ class WMemNN:
         self.lr = lr
         self.momentum = momentum
         self.n_words = n_words
+        self.batch_size = 32
 
         self.word_to_id = word_to_id
         self.id_to_word = dict((v, k) for k, v in word_to_id.iteritems())
 
         # Statement
         x = T.imatrix('x')
+        xbatch = T.tensor3('xb', dtype='int32')
 
         # Positional encoding matrix
         pe = T.tensor3('pe')
 
         # Question
         q = T.ivector('q')
+        qbatch = T.imatrix('qb')
 
         # True word
         r = T.iscalar('r')
+        rbatch = T.ivector('rb')
 
         # Question embedding
         self.B = glorot_uniform((self.n_words, self.n_embedding))
@@ -71,7 +75,8 @@ class WMemNN:
         self.H = glorot_uniform((self.n_embedding, self.n_embedding))
 
         memory_cost = self.memnn_cost(x, q, pe)
-        memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
+        # memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
+        memory_loss = self.memnn_batch_cost(xbatch, qbatch, rbatch, pe)
 
         params = [
             self.B,
@@ -97,12 +102,12 @@ class WMemNN:
 
         self.train_function = theano.function(
             inputs = [
-                x, q, r, pe
+                xbatch, qbatch, rbatch, pe
             ],
             outputs = cost,
             updates = updates,
             allow_input_downcast=True,
-            #mode='FAST_COMPILE'
+            mode='FAST_COMPILE',
             #mode='DebugMode'
             #mode=theano.compile.MonitorMode(pre_func=inspect_inputs,post_func=inspect_outputs)
             on_unused_input='warn'
@@ -114,11 +119,12 @@ class WMemNN:
             ],
             outputs = memory_cost,
             allow_input_downcast=True,
-            on_unused_input='warn'
+            on_unused_input='warn',
+            mode='FAST_COMPILE'
         )
 
-    def _compute_memories(self, statement, previous, weights, pe_matrix):
-        pe_weights = pe_matrix * weights[statement]
+    def _compute_memories(self, statement, previous, weights): #, pe_matrix):
+        pe_weights = weights[statement] # pe_matrix * 
         memories = T.sum(pe_weights, axis=0)
         # memories = T.sum(weights[statement], axis=0)
         return memories
@@ -132,7 +138,15 @@ class WMemNN:
                     pe_matrix[j,i,k] = value
         return pe_matrix
 
-    def memnn_cost(self, statements, question, pe_matrix):
+    def memnn_batch_cost(self, statements_batch, question_batch, r_batch): #, pe_matrix):
+        l = statements_batch.shape[0]
+        s, _ = theano.scan(fn=lambda i, c, xb, qb, rb, pe: c - T.log(self.memnn_cost(xb[i], qb[i], pe)[rb[i]]),
+                           outputs_info=T.as_tensor_variable(np.asarray(0, theano.config.floatX)),
+                           non_sequences=[statements_batch, question_batch, r_batch), #, pe_matrix],
+                           sequences=[theano.tensor.arange(l, dtype='int64')])
+        return s[-1] / l
+
+    def memnn_cost(self, statements, question): #, pe_matrix):
         # statements: list of list of word indices
         # question: list of word indices
 
@@ -143,8 +157,8 @@ class WMemNN:
                 alloc_zeros_matrix(self.weights.shape[0], self.n_embedding)
             ],
             non_sequences = [
-                self.weights.dimshuffle(1, 0, 2),
-                pe_matrix
+                self.weights.dimshuffle(1, 0, 2)
+                # pe_matrix
             ],
             truncate_gradient = -1,
         )
@@ -175,27 +189,34 @@ class WMemNN:
 
     def train(self, dataset, questions, n_epochs=100, lr_schedule=None, start_epoch=0):
         l_rate = self.lr
+        index_array = np.arange(len(questions))
         for epoch in xrange(start_epoch, start_epoch + n_epochs):
             costs = []
 
             if lr_schedule != None and epoch in lr_schedule:
                 l_rate = lr_schedule[epoch]
 
-            random.shuffle(questions)
-            for i, question in enumerate(questions):
-                statements_seq = sequence.pad_sequences(np.asarray(question[2][:-1]))
-                question_seq = np.asarray(question[2][-1])
+            np.random.shuffle(index_array)
+            seen = 0
 
-                pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
+            batches = make_batches(len(questions), self.batch_size)
+            for batch_index, (batch_start, batch_end) in enumerate(batches):
+                batch_ids = index_array[batch_start:batch_end]
+                seen += len(batch_ids)
+                questions_batch = []
+                for index in batch_ids:
+                    questions_batch.append(questions[index])
+                statements_seq_batch = np.asarray(map(lambda x: sequence.pad_sequences(x[2][:-1]), questions_batch))
+                question_seq_batch = np.asarray(map(lambda x: x[2][-1], questions_batch))
+                correct_word_batch = np.asarray(map(lambda x: x[3], questions_batch))
 
-                # Correct word
-                correct_word = question[3]
+                # pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
 
                 cost = self.train_function(
-                    statements_seq,
-                    question_seq,
-                    correct_word,
-                    pe_matrix
+                    statements_seq_batch,
+                    question_seq_batch,
+                    correct_word_batch
+                    # pe_matrix
                 )
 
                 #print "Epoch %d, sample %d: %f" % (epoch, i, cost)

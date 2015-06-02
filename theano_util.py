@@ -22,6 +22,10 @@ def init_shared_zeros(*shape):
     '''Initialize a vector shared variable with zero elements.'''
     return theano.shared(np.zeros(shape, dtype=dtype))
 
+def make_batches(size, batch_size):
+    nb_batch = int(np.ceil(size/float(batch_size)))
+    return [(i*batch_size, min(size, (i+1)*batch_size)) for i in range(0, nb_batch)]
+
 def get_param_updates(params, grads, lr, method=None, **kwargs):
     rho = 0.95
     epsilon = 1e-6
