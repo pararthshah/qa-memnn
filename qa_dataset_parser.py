@@ -144,13 +144,16 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
 
         question_set.add(question_tuple)
         question[2] = article_data[question[1]] + question[2]
-        question[1] = -1
 
     questions = filter(lambda x: x[0] is not None, questions)
     print("There are %d questions after deduplication" % len(questions))
 
     print("Trying to prune extraneaous statements...")
     questions = prune_statements(dataset, questions)
+    before_prune = len(questions)
+    questions = filter(lambda x: len(x[2]) > 1, questions)
+    after_prune = len(questions)
+    print("Pruning invalidated %d questions", (before_prune - after_prune))
 
     print("Final processing...")
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
