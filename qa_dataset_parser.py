@@ -1,11 +1,10 @@
 import re
 
 from theano_util import *
+#from wordvec_pruning import prune_statements
+from pos_pruning import prune_statements
 
-import nltk
-from nltk.stem.wordnet import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
-from nltk.corpus import wordnet as wn
+from nltk_utils import *
 
 def only_words(line):
     ps = re.sub(r'[^a-zA-Z0-9]', r' ', line)
@@ -32,78 +31,6 @@ def get_sentences(line):
     rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
 
     return rs.split('\t')
-
-def is_noun(tag):
-    return tag in ['NN', 'NNS', 'NNP', 'NNPS']
-
-def is_verb(tag):
-    return tag in ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ']
-
-def is_adverb(tag):
-    return tag in ['RB', 'RBR', 'RBS']
-
-def is_adjective(tag):
-    return tag in ['JJ', 'JJR', 'JJS']
-
-def penn_to_wn(tag):
-    if is_adjective(tag):
-        return wn.ADJ
-    elif is_noun(tag):
-        return wn.NOUN
-    elif is_adverb(tag):
-        return wn.ADV
-    elif is_verb(tag):
-        return wn.VERB
-    return wn.NOUN
-
-def memoize1(f):
-    memo = {}
-    def helper(x):
-        if x not in memo:
-            memo[x] = f(x)
-        return memo[x]
-    return helper
-
-def memoize2(f):
-    memo = {}
-    def helper(x,y):
-        if (x,y) not in memo:
-            memo[(x,y)] = f(x, y)
-        return memo[(x,y)]
-    return helper
-
-def stem_word(word):
-    return nltk.stem.snowball.EnglishStemmer().stem(word)
-
-stem_word = memoize1(stem_word)
-
-def get_lemma(word, tag):
-    return WordNetLemmatizer().lemmatize(word, tag)
-
-get_lemma = memoize2(get_lemma)
-
-def canonicalize_tokens(tokens):
-    canonical_tokens = []
-    tags = nltk.pos_tag(tokens)
-    for tag in tags:
-        wn_tag = penn_to_wn(tag[1])
-        t = get_lemma(tag[0], wn_tag)
-        t = stem_word(t)
-        canonical_tokens.append(t)
-    return canonical_tokens
-
-def prune_statements(questions):
-    for i in range(len(questions)):
-        new_statements = []
-        old_statements = questions[i][1]
-
-        # Idea 1
-        # Use word vectors and keep only the top 5
-
-
-
-        questions[i][1] = new_statements
-        print("Question: ", questions[i][2], " before %d after %d" % (len(old_statements), len(new_statements)))
 
 def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []
@@ -222,8 +149,8 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     questions = filter(lambda x: x[0] is not None, questions)
     print("There are %d questions after deduplication" % len(questions))
 
-    #print("Trying to prune extraneaous statements...")
-    #questions = prune_statements(questions)
+    print("Trying to prune extraneaous statements...")
+    questions = prune_statements(dataset, questions)
 
     print("Final processing...")
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)

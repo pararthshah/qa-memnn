@@ -23,6 +23,7 @@ def inspect_outputs(i, node, fn):
 
 class WMemNN:
     def __init__(self, n_words, n_embedding=100, lr=0.01, momentum=0.9, word_to_id=None):
+        self.regularization = 0.001
         self.n_embedding = n_embedding
         self.lr = lr
         self.momentum = momentum
@@ -72,8 +73,6 @@ class WMemNN:
         memory_cost = self.memnn_cost(x, q, pe)
         memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
 
-        cost = memory_loss
-
         params = [
             self.B,
             self.weights,
@@ -83,6 +82,13 @@ class WMemNN:
             self.W,
             self.H,
         ]
+
+        regularization_cost = reduce(
+            lambda x,y: x + y,
+            map(lambda x: self.regularization * T.sum(x ** 2), params)
+        )
+
+        cost = memory_loss + regularization_cost
 
         grads = T.grad(cost, params)
 
@@ -232,6 +238,11 @@ if __name__ == "__main__":
     else:
         n_epochs = 10
 
+    if len(sys.argv) > 3:
+        n_embedding = int(sys.argv[3])
+    else:
+        n_embedding = 100
+
     mode = 'babi' # babi or wiki
 
     if '.pickle' in train_file:
@@ -259,7 +270,9 @@ if __name__ == "__main__":
         word_to_id = {}
 
     # print "Dataset has %d words" % num_words
-    wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)
+    wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)    
+    #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
+    #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
 
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, n_epochs=5, start_epoch=5*i)
