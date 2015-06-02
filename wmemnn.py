@@ -35,7 +35,7 @@ class WMemNN:
         x = T.imatrix('x')
 
         # Positional encoding matrix
-        pe = T.matrix('pe')
+        pe = T.tensor3('pe')
 
         # Question
         q = T.ivector('q')
@@ -87,7 +87,7 @@ class WMemNN:
         grads = T.grad(cost, params)
 
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=self.lr, method='adagrad', momentum=0.9)
+        updates = get_param_updates(params, grads, lr=self.lr, method='momentum', momentum=0.9)
 
         self.train_function = theano.function(
             inputs = [
@@ -99,6 +99,7 @@ class WMemNN:
             #mode='FAST_COMPILE'
             #mode='DebugMode'
             #mode=theano.compile.MonitorMode(pre_func=inspect_inputs,post_func=inspect_outputs)
+            on_unused_input='warn'
         )
 
         self.predict_function = theano.function(
@@ -106,18 +107,23 @@ class WMemNN:
                 x, q, pe
             ],
             outputs = memory_cost,
-            allow_input_downcast=True
+            allow_input_downcast=True,
+            on_unused_input='warn'
         )
 
     def _compute_memories(self, statement, previous, weights, pe_matrix):
-        memories = T.sum(pe_matrix * weights[statement], axis=0)
+        pe_weights = pe_matrix * weights[statement]
+        memories = T.sum(pe_weights, axis=0)
+        # memories = T.sum(weights[statement], axis=0)
         return memories
 
     def get_PE_matrix(self, num_words, embedding_size):
-        pe_matrix = np.zeros((num_words, embedding_size))
+        pe_matrix = np.zeros((num_words, 4, embedding_size))
         for j in range(num_words):
             for k in range(embedding_size):
-                pe_matrix[j,k] = (1 - float(j+1)/num_words) - (float(k+1)/embedding_size) * (1 - 2*float(j+1)/num_words)
+                value = (1 - float(j+1)/num_words) - (float(k+1)/embedding_size) * (1 - 2*float(j+1)/num_words)
+                for i in range(4):
+                    pe_matrix[j,i,k] = value
         return pe_matrix
 
     def memnn_cost(self, statements, question, pe_matrix):
@@ -161,9 +167,9 @@ class WMemNN:
 
         return output[0]
 
-    def train(self, dataset, questions, n_epochs=100, lr_schedule=None):
+    def train(self, dataset, questions, n_epochs=100, lr_schedule=None, start_epoch=0):
         l_rate = self.lr
-        for epoch in xrange(n_epochs):
+        for epoch in xrange(start_epoch, start_epoch + n_epochs):
             costs = []
 
             if lr_schedule != None and epoch in lr_schedule:
@@ -175,8 +181,6 @@ class WMemNN:
                 question_seq = np.asarray(question[2][-1])
 
                 pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
-
-                print statements_seq.shape, pe_matrix.shape
 
                 # Correct word
                 correct_word = question[3]
@@ -236,7 +240,7 @@ if __name__ == "__main__":
     if mode == 'babi':
         train_dataset, train_questions, word_to_id, num_words = parse_dataset_weak(train_file)
         test_dataset, test_questions, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
-    else:
+    elif mode == 'wiki':
         # Check for pickled dataset
         print("Loading pickled train dataset")
         f = file(train_file, 'rb')
@@ -248,11 +252,16 @@ if __name__ == "__main__":
         f = file(test_file, 'rb')
         obj = cPickle.load(f)
         test_dataset, test_questions, word_to_id, num_words = obj
+    elif mode == 'debug':
+        train_dataset = []
+        train_questions = [[0, 2, [[0, 1, 2, 3, 4, 5], [6, 7, 2, 3, 8, 5], [9, 10, 0, 11]], 4]]
+        num_words = 12
+        word_to_id = {}
 
-    print "Dataset has %d words" % num_words
+    # print "Dataset has %d words" % num_words
     wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)
 
     for i in xrange(n_epochs/5):
-        wmemNN.train(train_dataset, train_questions, n_epochs=5)
+        wmemNN.train(train_dataset, train_questions, n_epochs=5, start_epoch=5*i)
         wmemNN.predict(train_dataset, train_questions)
         wmemNN.predict(test_dataset, test_questions)
