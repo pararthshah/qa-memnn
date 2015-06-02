@@ -246,7 +246,7 @@ class WMemNN:
     def predict(self, dataset, questions, max_words=20):
         correct_answers = 0
         wrong_answers = 0
-        pe_matrix = self.get_PE_matrix(max_words, self.n_embedding)
+        pe_matrix = self._get_PE_matrix(max_words, self.n_embedding)
 
         for i, question in enumerate(questions):
             statements_seq = np.asarray(question[2], theano.config.floatX)
