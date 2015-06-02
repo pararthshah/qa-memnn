@@ -1,6 +1,7 @@
 import re
 
 from theano_util import *
+from wordvec_pruning import prune_statements
 
 import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -91,19 +92,6 @@ def canonicalize_tokens(tokens):
         t = stem_word(t)
         canonical_tokens.append(t)
     return canonical_tokens
-
-def prune_statements(questions):
-    for i in range(len(questions)):
-        new_statements = []
-        old_statements = questions[i][1]
-
-        # Idea 1
-        # Use word vectors and keep only the top 5
-
-
-
-        questions[i][1] = new_statements
-        print("Question: ", questions[i][2], " before %d after %d" % (len(old_statements), len(new_statements)))
 
 def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     dataset = []
@@ -222,8 +210,8 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     questions = filter(lambda x: x[0] is not None, questions)
     print("There are %d questions after deduplication" % len(questions))
 
-    #print("Trying to prune extraneaous statements...")
-    #questions = prune_statements(questions)
+    print("Trying to prune extraneaous statements...")
+    questions = prune_statements(dataset, questions)
 
     print("Final processing...")
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
