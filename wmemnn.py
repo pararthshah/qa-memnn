@@ -322,4 +322,4 @@ if __name__ == "__main__":
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
         wmemNN.predict(train_dataset, train_questions, max_words)
-        wmemNN.predict(test_dataset, test_questions, ma)
+        wmemNN.predict(test_dataset, test_questions, max_words)
