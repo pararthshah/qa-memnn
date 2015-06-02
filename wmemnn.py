@@ -108,7 +108,7 @@ class WMemNN:
             inputs = [
                 xbatch, qbatch, rbatch, pe,
                 theano.Param(l_rate, default=self.lr),
-                theano.Param(zero_vector, default=np.zeros((self.n_embedding,)))
+                theano.Param(zero_vector, default=np.zeros((self.n_embedding,), theano.config.floatX))
             ],
             outputs = cost,
             updates = updates,
@@ -142,7 +142,7 @@ class WMemNN:
         return memories
 
     def _get_PE_matrix(self, num_words, embedding_size):
-        pe_matrix = np.zeros((num_words, 4, embedding_size))
+        pe_matrix = np.zeros((num_words, 4, embedding_size), theano.config.floatX)
         for j in range(num_words):
             for k in range(embedding_size):
                 value = (1 - float(j+1)/num_words) - (float(k+1)/embedding_size) * (1 - 2*float(j+1)/num_words)
@@ -224,11 +224,11 @@ class WMemNN:
                     questions_batch.append(questions[index])
 
                 # (batch_size * max_stmts * max_words)
-                statements_seq_batch = np.asarray(map(lambda x: x[2], questions_batch))
+                statements_seq_batch = np.asarray(map(lambda x: x[2], questions_batch), theano.config.floatX)
                 # (batch_size * max_words)
-                question_seq_batch = np.asarray(map(lambda x: x[3], questions_batch))
+                question_seq_batch = np.asarray(map(lambda x: x[3], questions_batch), theano.config.floatX)
                 # (batch_size)
-                correct_word_batch = np.asarray(map(lambda x: x[4], questions_batch))
+                correct_word_batch = np.asarray(map(lambda x: x[4], questions_batch), theano.config.floatX)
 
                 cost = self.train_function(
                     statements_seq_batch,
@@ -243,15 +243,15 @@ class WMemNN:
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
 
-    def predict(self, dataset, questions):
+    def predict(self, dataset, questions, max_words=20):
         correct_answers = 0
         wrong_answers = 0
-        for i, question in enumerate(questions):
-            statements_seq = np.asarray(question[2])
-            question_seq = np.asarray(question[3])
-            correct = question[4]
+        pe_matrix = self.get_PE_matrix(max_words, self.n_embedding)
 
-            pe_matrix = self.get_PE_matrix(statements_seq.shape[1], self.n_embedding)
+        for i, question in enumerate(questions):
+            statements_seq = np.asarray(question[2], theano.config.floatX)
+            question_seq = np.asarray(question[3], theano.config.floatX)
+            correct = question[4]
 
             probs = self.predict_function(
                 statements_seq, question_seq, pe_matrix
@@ -321,5 +321,5 @@ if __name__ == "__main__":
 
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
-        wmemNN.predict(train_dataset, train_questions)
-        wmemNN.predict(test_dataset, test_questions)
+        wmemNN.predict(train_dataset, train_questions, max_words)
+        wmemNN.predict(test_dataset, test_questions, ma)
