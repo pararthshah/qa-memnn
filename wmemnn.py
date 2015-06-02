@@ -92,12 +92,15 @@ class WMemNN:
 
         grads = T.grad(cost, params)
 
+        l_rate = T.scalar('l_rate')
+
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=self.lr, method='momentum', momentum=0.9)
+        updates = get_param_updates(params, grads, lr=l_rate, method='momentum', momentum=0.9)
 
         self.train_function = theano.function(
             inputs = [
-                x, q, r, pe
+                x, q, r, pe,
+                theano.Param(l_rate)
             ],
             outputs = cost,
             updates = updates,
@@ -195,7 +198,8 @@ class WMemNN:
                     statements_seq,
                     question_seq,
                     correct_word,
-                    pe_matrix
+                    pe_matrix,
+                    l_rate
                 )
 
                 #print "Epoch %d, sample %d: %f" % (epoch, i, cost)
@@ -270,11 +274,11 @@ if __name__ == "__main__":
         word_to_id = {}
 
     # print "Dataset has %d words" % num_words
-    wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)    
+    wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id)
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
 
     for i in xrange(n_epochs/5):
-        wmemNN.train(train_dataset, train_questions, n_epochs=5, start_epoch=5*i)
+        wmemNN.train(train_dataset, train_questions, n_epochs=5, start_epoch=5*i, lr_schedule=dict([(0, 0.01), (25, 0.01/2), (50, 0.01/4), (75, 0.01/8)]))
         wmemNN.predict(train_dataset, train_questions)
         wmemNN.predict(test_dataset, test_questions)
