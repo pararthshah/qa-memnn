@@ -101,7 +101,7 @@ class WMemNN:
         l_rate = T.scalar('l_rate')
 
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=l_rate, method='default', momentum=0.9, 
+        updates = get_param_updates(params, grads, lr=l_rate, method='momentum', momentum=0.9, 
             constraint=self._constrain_embedding(self.null_word_id, zero_vector))
 
         self.train_function = theano.function(
