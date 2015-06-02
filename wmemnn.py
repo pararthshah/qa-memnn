@@ -217,7 +217,6 @@ if __name__ == "__main__":
 
         print("Loading pickled test dataset")
         f = file(test_file, 'rb')
-        import cPickle
         obj = cPickle.load(f)
         test_dataset, test_questions, word_to_id, num_words = obj
 
