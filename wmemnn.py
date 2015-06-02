@@ -156,7 +156,7 @@ class WMemNN:
                            outputs_info=T.as_tensor_variable(np.asarray(0, theano.config.floatX)),
                            non_sequences=[statements_batch, question_batch, r_batch, pe_matrix],
                            sequences=[theano.tensor.arange(l, dtype='int64')])
-        return s[-1]
+        return s[-1] / l
 
     def memnn_cost(self, statements, question, pe_matrix):
         # statements: list of list of word indices

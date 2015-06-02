@@ -75,7 +75,8 @@ def get_param_updates(params, grads, lr, method=None, **kwargs):
         momentum = kwargs['momentum']
         for param, gparam in zip(params, grads):
             param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
-            param_update_update = maxnorm_constraint(momentum*param_update + (1. - momentum)*gparam)
+            gparam_constrained = maxnorm_constraint(gparam)
+            param_update_update = momentum*param_update + (1. - momentum)*gparam_constrained
             updates.append((param, param - param_update * lr))
             updates.append((param_update, param_update_update))
 
