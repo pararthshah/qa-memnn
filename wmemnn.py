@@ -293,7 +293,7 @@ if __name__ == "__main__":
 
     # if mode == 'babi':
     train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
-    test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, max_stmts=max_stmts, max_words=max_words)
     # elif mode == 'wiki':
     #     # Check for pickled dataset
     #     print("Loading pickled train dataset")
