@@ -89,7 +89,7 @@ def get_param_updates(params, grads, lr, method=None, **kwargs):
     # apply constraints on self.weights update
     # assumes that updates[0] corresponds to self.weights param
     if constraint != None:
-        updates[0] = (updates[0][0], constraint(updates[0][0]))
+        updates[0] = (updates[0][0], constraint(updates[0][1]))
 
     return updates
 
