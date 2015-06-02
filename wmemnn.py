@@ -288,8 +288,8 @@ if __name__ == "__main__":
     if '.pickle' in train_file:
         mode = 'wiki'
 
-    max_stmts = 20
-    max_words = 20
+    max_stmts = 50
+    max_words = 50
 
     # if mode == 'babi':
     train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
