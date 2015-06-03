@@ -11,7 +11,9 @@ from keras.preprocessing import sequence
 
 from qa_dataset_parser import parse_qa_dataset
 
-theano.config.exception_verbosity = 'high'
+import cPickle
+
+# theano.config.exception_verbosity = 'high'
 # theano.config.allow_gc = False
 #theano.config.profile = True
 
@@ -22,17 +24,37 @@ def inspect_outputs(i, node, fn):
     print i, node, "outputs:", [output[0] for output in fn.outputs]
 
 class WMemNN:
-    def __init__(self, n_words, n_embedding=100, lr=0.01, momentum=0.9, word_to_id=None, null_word_id=-1):
-        self.regularization = 0.001
-        self.n_embedding = n_embedding
-        self.lr = lr
-        self.momentum = momentum
-        self.n_words = n_words
-        self.batch_size = 32
+    def __init__(self, n_words=20, n_embedding=100, lr=0.01, 
+                 momentum=0.9, word_to_id=None, null_word_id=-1, 
+                 max_stmts=20, max_words=20, load_from_file=None):
+        if load_from_file:
+            self.load_model(load_from_file)
+        else:
+            self.regularization = 0.000
+            self.n_embedding = n_embedding
+            self.lr = lr
+            self.momentum = momentum
+            self.n_words = n_words
+            self.batch_size = 32
+            self.max_stmts = max_stmts
+            self.max_words = max_words
 
-        self.word_to_id = word_to_id
-        self.id_to_word = dict((v, k) for k, v in word_to_id.iteritems())
-        self.null_word_id = null_word_id
+            self.word_to_id = word_to_id
+            self.id_to_word = dict((v, k) for k, v in word_to_id.iteritems())
+            self.null_word_id = null_word_id
+
+            # Question embedding
+            # self.B = init_shared_normal(self.n_words, self.n_embedding, 0.1)
+
+            # Statement input, output embeddings
+            self.weights = init_shared_normal_tensor(4, self.n_words, self.n_embedding, 0.1)
+
+            # Linear mapping between layers
+            self.H = init_shared_normal(self.n_embedding, self.n_embedding, 0.1)
+
+            # Final outut weight matrix
+            # self.W = init_shared_normal(self.n_embedding, self.n_words, 0.1)
+
 
         zero_vector = T.vector('zv', dtype=theano.config.floatX)
 
@@ -49,34 +71,7 @@ class WMemNN:
 
         # True word
         r = T.iscalar('r')
-        rbatch = T.ivector('rb')
-
-        # Question embedding
-        self.B = init_shared_normal(self.n_words, self.n_embedding, 0.1)
-
-        # Statement input, output embeddings
-        # self.A1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        # self.C1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        # self.A2 = self.C1
-        # self.C2 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        # self.A3 = self.C2
-        # self.C3 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
-        # self.weights = [
-        #     self.A1,
-        #     self.C1,
-        #     #self.A2,
-        #     self.C2,
-        #     #self.A3,
-        #     self.C3
-        # ]
-        # self.weights = glorot_uniform((4, self.n_words, self.n_embedding))
-        self.weights = init_shared_normal_tensor(4, self.n_words, self.n_embedding, 0.1)
-
-        # Final outut weight matrix
-        self.W = init_shared_normal(self.n_embedding, self.n_words, 0.1)
-
-        # Linear mapping between layers
-        self.H = init_shared_normal(self.n_embedding, self.n_embedding, 0.1)
+        rbatch = T.ivector('rb')      
 
         memory_cost = self.memnn_cost(x, q, pe)
         # memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
@@ -84,9 +79,9 @@ class WMemNN:
 
         params = [
             self.weights,
-            self.B,
-            self.W,
-            self.H,
+            # self.B,
+            # self.W,
+            self.H
         ]
 
         regularization_cost = reduce(
@@ -150,6 +145,33 @@ class WMemNN:
         #             pe_matrix[j,i,k] = value
         return pe_matrix
 
+    def save_model(self, filename):
+        f = file(filename, 'wb')
+        for obj in [self.regularization, self.n_embedding, self.lr, 
+                    self.momentum, self.n_words, self.batch_size, 
+                    self.word_to_id, self.id_to_word, self.null_word_id,
+                    self.max_stmts, self.max_words, self.weights, self.H]:
+            cPickle.dump(obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
+        f.close()
+
+    def load_model(self, filename):
+        f = file(filename, 'rb')
+        self.regularization = cPickle.load(f)
+        self.n_embedding = cPickle.load(f)
+        self.lr = cPickle.load(f)
+        self.momentum = cPickle.load(f)
+        self.n_words = cPickle.load(f)
+        self.batch_size = cPickle.load(f)
+        self.word_to_id = cPickle.load(f)
+        self.id_to_word = cPickle.load(f)
+        self.null_word_id = cPickle.load(f)
+        self.max_stmts = cPickle.load(f)
+        self.max_words = cPickle.load(f)
+        self.weights = cPickle.load(f)
+        self.H = cPickle.load(f)
+        f.close()
+
+
     def memnn_batch_cost(self, statements_batch, question_batch, r_batch, pe_matrix):
         l = statements_batch.shape[0]
         s, _ = theano.scan(fn=lambda i, c, xb, qb, rb, pe: c - T.log(self.memnn_cost(xb[i], qb[i], pe)[rb[i]]),
@@ -178,7 +200,7 @@ class WMemNN:
         memories = T.stacklists(computed_memories).dimshuffle(1, 0, 2)
 
         # Embed question
-        u1 = T.sum(self.B[question], axis=0)
+        u1 = T.sum(self.weights[0][question], axis=0)
 
         # Layer 1
         p = T.nnet.softmax(T.dot(u1, memories[0].T))
@@ -195,7 +217,7 @@ class WMemNN:
         o3 = T.dot(p, memories[3])
 
         # Final
-        output = T.nnet.softmax(T.dot(o3 + u3, self.W))
+        output = T.nnet.softmax(T.dot(o3 + u3, self.weights[3].T))
 
         return output[0]
 
@@ -243,7 +265,7 @@ class WMemNN:
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
 
-    def predict(self, dataset, questions, max_words=20):
+    def predict(self, dataset, questions, max_words=20, print_errors=False):
         correct_answers = 0
         wrong_answers = 0
         pe_matrix = self._get_PE_matrix(max_words, self.n_embedding)
@@ -261,7 +283,7 @@ class WMemNN:
             if predicted == correct:
                 correct_answers += 1
             else:
-                if np.random.rand() < 0.02:
+                if print_errors and np.random.rand() < 0.02:
                     print 'Correct: %s (%d %.3f), Guess: %s (%d %.3f)' % (self.id_to_word[correct], correct, probs[correct], self.id_to_word[predicted], predicted, probs[predicted])
                 wrong_answers += 1
 
@@ -282,7 +304,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 3:
         n_embedding = int(sys.argv[3])
     else:
-        n_embedding = 100
+        n_embedding = 20
 
     mode = 'babi' # babi or wiki
 
@@ -313,15 +335,30 @@ if __name__ == "__main__":
     #     num_words = 12
     #     word_to_id = {}
 
-    # print "Dataset has %d words" % num_words
-    print train_questions[0]
-    wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id, null_word_id=null_word_id)
-    #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
-    #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
+    print "Dataset has %d words" % num_words
+    # print train_questions[0]
 
-    lr_schedule = dict([(0, 0.01), (25, 0.01/2), (50, 0.01/4), (75, 0.01/8)])
+    model_file = "model_save.dat"
+    train_my_model = True
+    save_my_model = True
 
-    for i in xrange(n_epochs/5):
-        wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
+    if train_my_model:
+        wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id, null_word_id=null_word_id,
+                        max_stmts=max_stmts, max_words=max_words)
+
+        lr_schedule = dict([(0, 0.01), (25, 0.01/2), (50, 0.01/4), (75, 0.01/8)])
+
+        for i in xrange(n_epochs/5):
+            wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
+            wmemNN.predict(train_dataset, train_questions, max_words)
+            wmemNN.predict(test_dataset, test_questions, max_words)
+
+        if save_my_model:
+            print "Saving model to", model_file
+            wmemNN.save_model(model_file)
+    else:
+        wmemNN = WMemNN(load_from_file=model_file)
         wmemNN.predict(train_dataset, train_questions, max_words)
         wmemNN.predict(test_dataset, test_questions, max_words)
+
+
