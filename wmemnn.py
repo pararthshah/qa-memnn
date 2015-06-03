@@ -289,12 +289,12 @@ if __name__ == "__main__":
     if '.pickle' in train_file:
         mode = 'wiki'
 
-    max_stmts = 10
-    max_words = 10
+    max_stmts = 20
+    max_words = 20
 
     # if mode == 'babi':
-    # train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
-    # test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, max_stmts=max_stmts, max_words=max_words)
+    #train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
+    #test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, max_stmts=max_stmts, max_words=max_words)
     # elif mode == 'wiki':
     #     # Check for pickled dataset
     print("Loading pickled train dataset")
@@ -303,10 +303,10 @@ if __name__ == "__main__":
     obj = cPickle.load(f)
     train_dataset, train_questions, word_to_id, num_words, null_word_id = obj
 
-    #     print("Loading pickled test dataset")
-    #     f = file(test_file, 'rb')
-    #     obj = cPickle.load(f)
-    #     test_dataset, test_questions, word_to_id, num_words = obj
+    print("Loading pickled test dataset")
+    f = file(test_file, 'rb')
+    obj = cPickle.load(f)
+    test_dataset, test_questions, _, _, _ = obj
     # elif mode == 'debug':
     #     train_dataset = []
     #     train_questions = [[0, 2, [[0, 1, 2, 3, 4, 5], [6, 7, 2, 3, 8, 5], [9, 10, 0, 11]], 4]]
@@ -324,4 +324,4 @@ if __name__ == "__main__":
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
         wmemNN.predict(train_dataset, train_questions, max_words)
-        #wmemNN.predict(test_dataset, test_questions, max_words)
+        wmemNN.predict(test_dataset, test_questions, max_words)

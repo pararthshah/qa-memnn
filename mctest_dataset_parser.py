@@ -64,6 +64,7 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
     assert(len(questions_data) == len(answers_data))
 
     more_than_1_word_answers = 0
+    answer_word_unknown = 0
 
     for i in xrange(len(questions_data)):
         question_line = questions_data[i]
@@ -88,6 +89,10 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                     if token not in word_to_id:
                         word_to_id[token] = word_id
                         word_id += 1
+            else:
+                tokens = filter(lambda x: x in word_to_id, tokens)
+
+            tokens = pad_statement(tokens, null_word, max_words)
 
             statements.append(tokens)
             dataset.append(tokens)
@@ -99,7 +104,6 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
             q_index = (j * 5) + 3
             q_words = question_pieces[q_index]
             q_words = clean_sentence(q_words).split()
-            q_words = pad_statement(q_words, null_word, max_words)
 
             options = [
                 only_words(question_pieces[q_index + 1]),
@@ -115,10 +119,17 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                     if token not in word_to_id:
                         word_to_id[token] = word_id
                         word_id += 1
+            else:
+                q_words = filter(lambda x: x in word_to_id, q_words)
+
+            q_words = pad_statement(q_words, null_word, max_words)
 
             # Ignore more than 1 word answers
             if len(answer.split(' ')) > 1:
                 more_than_1_word_answers += 1
+                continue
+            elif answer not in word_to_id:
+                answer_word_unknown += 1
                 continue
 
             article_no = len(questions)
@@ -128,6 +139,7 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
     print "There are %d statements" % len(dataset)
     print "There are %d words" % len(word_to_id)
     print "Ignored %d questions which had more than 1 word answers" % more_than_1_word_answers
+    print "Ignored %d questions which had an unknown answer word" % answer_word_unknown
 
     print("Final processing...")
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
@@ -139,10 +151,13 @@ if __name__ == "__main__":
     train_file = 'mc160.train.tsv'
     train_answers = train_file.replace('tsv', 'ans')
 
+    test_file = train_file.replace('train', 'test')
+    test_answers = test_file.replace('tsv', 'ans')
+
     data_dir = sys.argv[1]
 
     train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_mc_test_dataset(data_dir + '/' + train_file, data_dir + '/' + train_answers)
-    #test_dataset, test_questions, word_to_id, num_words = parse_qa_dataset(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
+    test_dataset, test_questions, word_to_id, num_words, null_word_id = parse_mc_test_dataset(data_dir + '/' + test_file, data_dir + '/' + test_answers, word_id=num_words, word_to_id=word_to_id, update_word_ids=False)
 
     # Pickle!!!!
     print("Pickling train...")
@@ -151,7 +166,8 @@ if __name__ == "__main__":
     cPickle.dump((train_dataset, train_questions, word_to_id, num_words, null_word_id), f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()
 
-    #print("Pickling test...")
-    #f = file(data_dir + '/' + test_pickle, 'wb')
-    #cPickle.dump((test_dataset, test_questions, word_to_id, num_words), f, protocol=cPickle.HIGHEST_PROTOCOL)
-    #f.close()
+    print("Pickling test...")
+    test_pickle = test_file.replace('tsv', 'pickle')
+    f = file(data_dir + '/' + test_pickle, 'wb')
+    cPickle.dump((test_dataset, test_questions, word_to_id, num_words, null_word_id), f, protocol=cPickle.HIGHEST_PROTOCOL)
+    f.close()
