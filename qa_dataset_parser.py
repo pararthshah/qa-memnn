@@ -96,7 +96,7 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
             article_file = input_dir + '/' + article_name + '.txt.clean'
             article_files.add(article_file)
             dataset.append(question_tokens)
-            questions.append([article_no, article_file, [question_tokens], answer])
+            questions.append([article_no, article_file, None, question_tokens, answer])
 
     article_data = {}
     print("Parsing articles...")
@@ -137,13 +137,13 @@ def parse_qa_dataset(input_dir, word_id=0, word_to_id={}, update_word_ids=True):
     question_set = set()
     for i in xrange(len(questions)):
         question = questions[i]
-        question_tuple = tuple(question[2][0])
+        question_tuple = tuple(question[3])
         if question_tuple in question_set:
             question[0] = None
             continue
 
         question_set.add(question_tuple)
-        question[2] = article_data[question[1]] + question[2]
+        question[2] = article_data[question[1]]
 
     questions = filter(lambda x: x[0] is not None, questions)
     print("There are %d questions after deduplication" % len(questions))

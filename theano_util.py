@@ -53,11 +53,11 @@ def get_param_updates(params, grads, lr, method=None, **kwargs):
             # use the new accumulator and the *old* delta_accumulator
             update = g * T.sqrt(d_a + epsilon) / T.sqrt(new_a + epsilon)
             new_p = p - lr * update
-            
+
             # update delta_accumulator
             new_d_a = rho * d_a + (1 - rho) * update ** 2
 
-            updates.append((p, new_p)) 
+            updates.append((p, new_p))
             updates.append((a, new_a))
             updates.append((d_a, new_d_a))
 
@@ -65,7 +65,7 @@ def get_param_updates(params, grads, lr, method=None, **kwargs):
         print "Using ADAGRAD"
         for p, g, a in zip(params, grads, accumulators):
             new_a = a + g ** 2 # update accumulator
-            
+
             new_p = p - lr * g / T.sqrt(new_a + epsilon)
             updates.append((p, new_p)) # apply constraints
             updates.append((a, new_a))

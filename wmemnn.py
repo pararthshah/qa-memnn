@@ -101,7 +101,7 @@ class WMemNN:
         l_rate = T.scalar('l_rate')
 
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=l_rate, method='momentum', momentum=0.9, 
+        updates = get_param_updates(params, grads, lr=l_rate, method='momentum', momentum=0.9,
             constraint=self._constrain_embedding(self.null_word_id, zero_vector))
 
         self.train_function = theano.function(
@@ -288,19 +288,19 @@ if __name__ == "__main__":
     if '.pickle' in train_file:
         mode = 'wiki'
 
-    max_stmts = 50
-    max_words = 50
+    max_stmts = 20
+    max_words = 20
 
     # if mode == 'babi':
-    train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
-    test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, max_stmts=max_stmts, max_words=max_words)
+    # train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
+    # test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, max_stmts=max_stmts, max_words=max_words)
     # elif mode == 'wiki':
     #     # Check for pickled dataset
-    #     print("Loading pickled train dataset")
-    #     f = file(train_file, 'rb')
-    #     import cPickle
-    #     obj = cPickle.load(f)
-    #     train_dataset, train_questions, word_to_id, num_words = obj
+    print("Loading pickled train dataset")
+    f = file(train_file, 'rb')
+    import cPickle
+    obj = cPickle.load(f)
+    train_dataset, train_questions, word_to_id, num_words, null_word_id = obj
 
     #     print("Loading pickled test dataset")
     #     f = file(test_file, 'rb')
@@ -322,4 +322,4 @@ if __name__ == "__main__":
     for i in xrange(n_epochs/5):
         wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
         wmemNN.predict(train_dataset, train_questions, max_words)
-        wmemNN.predict(test_dataset, test_questions, max_words)
+        #wmemNN.predict(test_dataset, test_questions, max_words)
