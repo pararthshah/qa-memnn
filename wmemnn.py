@@ -30,7 +30,7 @@ class WMemNN:
         if load_from_file:
             self.load_model(load_from_file)
         else:
-            self.regularization = 0.000
+            self.regularization = 0.001
             self.n_embedding = n_embedding
             self.lr = lr
             self.momentum = momentum
@@ -314,32 +314,32 @@ if __name__ == "__main__":
     max_stmts = 20
     max_words = 20
 
-    # if mode == 'babi':
-    #train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
-    #test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, max_stmts=max_stmts, max_words=max_words)
-    # elif mode == 'wiki':
-    #     # Check for pickled dataset
-    print("Loading pickled train dataset")
-    f = file(train_file, 'rb')
-    import cPickle
-    obj = cPickle.load(f)
-    train_dataset, train_questions, word_to_id, num_words, null_word_id = obj
+    if mode == 'babi':
+        train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
+        test_dataset, test_questions, _, _, _ = parse_dataset_weak(test_file, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, max_stmts=max_stmts, max_words=max_words)
+    elif mode == 'wiki':
+        # Check for pickled dataset
+        print("Loading pickled train dataset")
+        f = file(train_file, 'rb')
+        import cPickle
+        obj = cPickle.load(f)
+        train_dataset, train_questions, word_to_id, num_words, null_word_id = obj
 
-    print("Loading pickled test dataset")
-    f = file(test_file, 'rb')
-    obj = cPickle.load(f)
-    test_dataset, test_questions, _, _, _ = obj
-    # elif mode == 'debug':
-    #     train_dataset = []
-    #     train_questions = [[0, 2, [[0, 1, 2, 3, 4, 5], [6, 7, 2, 3, 8, 5], [9, 10, 0, 11]], 4]]
-    #     num_words = 12
-    #     word_to_id = {}
+        print("Loading pickled test dataset")
+        f = file(test_file, 'rb')
+        obj = cPickle.load(f)
+        test_dataset, test_questions, _, _, _ = obj
+    elif mode == 'debug':
+        train_dataset = []
+        train_questions = [[0, 2, [[0, 1, 2, 3, 4, 5], [6, 7, 2, 3, 8, 5], [9, 10, 0, 11]], 4]]
+        num_words = 12
+        word_to_id = {}
 
     print "Dataset has %d words" % num_words
     # print train_questions[0]
 
-    model_file = "model_save.dat"
-    train_my_model = True
+    model_file = "mctest500_dim100_wmemnn.pickle"
+    train_my_model = False
     save_my_model = True
 
     if train_my_model:
