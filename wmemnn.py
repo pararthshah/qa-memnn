@@ -24,8 +24,8 @@ def inspect_outputs(i, node, fn):
     print i, node, "outputs:", [output[0] for output in fn.outputs]
 
 class WMemNN:
-    def __init__(self, n_words=20, n_embedding=100, lr=0.01, 
-                 momentum=0.9, word_to_id=None, null_word_id=-1, 
+    def __init__(self, n_words=20, n_embedding=100, lr=0.01,
+                 momentum=0.9, word_to_id=None, null_word_id=-1,
                  max_stmts=20, max_words=20, load_from_file=None):
         if load_from_file:
             self.load_model(load_from_file)
@@ -35,7 +35,7 @@ class WMemNN:
             self.lr = lr
             self.momentum = momentum
             self.n_words = n_words
-            self.batch_size = 32
+            self.batch_size = 4
             self.max_stmts = max_stmts
             self.max_words = max_words
 
@@ -71,7 +71,7 @@ class WMemNN:
 
         # True word
         r = T.iscalar('r')
-        rbatch = T.ivector('rb')      
+        rbatch = T.ivector('rb')
 
         memory_cost = self.memnn_cost(x, q, pe)
         # memory_loss = -T.log(memory_cost[r]) # cross entropy on softmax
@@ -147,8 +147,8 @@ class WMemNN:
 
     def save_model(self, filename):
         f = file(filename, 'wb')
-        for obj in [self.regularization, self.n_embedding, self.lr, 
-                    self.momentum, self.n_words, self.batch_size, 
+        for obj in [self.regularization, self.n_embedding, self.lr,
+                    self.momentum, self.n_words, self.batch_size,
                     self.word_to_id, self.id_to_word, self.null_word_id,
                     self.max_stmts, self.max_words, self.weights, self.H]:
             cPickle.dump(obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
@@ -279,6 +279,14 @@ class WMemNN:
                 statements_seq, question_seq, pe_matrix
             )
             predicted = np.argmax(probs)
+
+            if len(question) == 6:
+                ## For mc_test
+                options = question[5]
+                options_probs = probs[options]
+                best_idx = np.argmax(options_probs)
+                predicted = options[best_idx]
+                ##
 
             if predicted == correct:
                 correct_answers += 1

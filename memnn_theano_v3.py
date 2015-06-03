@@ -97,7 +97,7 @@ class MemNN:
         grads = T.grad(cost, params)
 
         # Parameter updates
-        updates = self.get_updates(params, grads, method='adadelta')
+        updates = self.get_updates(params, grads, method='adagrad')
 
         l_rate = T.scalar('l_rate')
 
@@ -233,7 +233,8 @@ class MemNN:
         # type 2: candidate memory (phi_y)
         # type 3: word vector
         # type 4: write-time features
-        assert(phi_type >= 0 and phi_type < 5)
+        # type 5: 0s
+        assert(phi_type >= 0 and phi_type < 6)
         phi = np.zeros((3*self.n_words + 3,))
         if phi_type < 3:
             assert(bow is not None)
@@ -241,6 +242,8 @@ class MemNN:
         elif phi_type == 3:
             assert(word_id != None and word_id < self.n_words)
             phi[2*self.n_words + word_id] = 1
+        elif phi_type == 5:
+            pass
         else:
             assert(ids != None and len(ids) == 3)
             if ids[0] > ids[1]: phi[3*self.n_words] = 1
@@ -301,7 +304,10 @@ class MemNN:
                 question_phi = question[2]
                 correct_stmts = question[4].split(' ')
                 correct_stmt1 = int(correct_stmts[0])
-                correct_stmt2 = int(correct_stmts[1])
+                is_single_statement = len(correct_stmts) == 1
+                correct_stmt2 = None
+                if not is_single_statement:
+                    correct_stmt2 = int(correct_stmts[1])
                 question_seq = question[-1]
 
                 if line_no <= 1:
@@ -326,11 +332,17 @@ class MemNN:
                 phi_f1_2 = self.construct_wt_phi(line_no, false_stmt1, correct_stmt1, article[false_stmt1], article[correct_stmt1])
 
                 # False statement 2
-                false_stmt2 = index_m1
-                if false_stmt2 == correct_stmt2:
-                    false_stmt2 = self.neg_sample(correct_stmt2, line_no)
-                phi_f2_1 = self.construct_wt_phi(line_no, correct_stmt2, false_stmt2, article[correct_stmt2], article[false_stmt2])
-                phi_f2_2 = self.construct_wt_phi(line_no, false_stmt2, correct_stmt2, article[false_stmt2], article[correct_stmt2])
+                phi_f2_1 = None
+                phi_f2_2 = None
+                if not is_single_statement:
+                    false_stmt2 = index_m1
+                    if false_stmt2 == correct_stmt2:
+                        false_stmt2 = self.neg_sample(correct_stmt2, line_no)
+                    phi_f2_1 = self.construct_wt_phi(line_no, correct_stmt2, false_stmt2, article[correct_stmt2], article[false_stmt2])
+                    phi_f2_2 = self.construct_wt_phi(line_no, false_stmt2, correct_stmt2, article[false_stmt2], article[correct_stmt2])
+                else:
+                    phi_f2_1 = self.construct_phi(5)
+                    phi_f2_2 = self.construct_phi(5)
 
                 # Correct word
                 correct_word = question[3]
@@ -379,8 +391,10 @@ class MemNN:
                 phi_m0 = self.construct_phi(1, m0)
                 index_m1, m1 = self.find_m0(index_m0, phi_x + phi_m0, statements[:line_no], ignore=index_m0)
 
-                c1 = int(question[4].split(' ')[0])
-                c2 = int(question[4].split(' ')[1])
+                correct_stmts = question[4].split(' ')
+                is_single_statement = len(correct_stmts) == 1
+                c1 = int(correct_stmts[0])
+                c2 = int(question[4].split(' ')[1]) if not is_single_statement else None
                 if (index_m0 == c1 or index_m0 == c2) and (index_m1 == c1 or index_m1 == c2):
                     fake_correct_answers += 1
 
@@ -416,7 +430,7 @@ class MemNN:
 
                 # Correct word
                 correct_word = question[3]
-                
+
                 cost = self.train_function(statements_seq, question_seq, correct_word)
 
                 #print "%d: %f" % (i, cost)
