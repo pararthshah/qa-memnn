@@ -237,7 +237,7 @@ def transform_ques_weak(question, word_to_id, num_words):
         index_stmt = map(lambda x: word_to_id[x], stmt)
         indices.append(index_stmt)
     question[2] = indices
-    question[3] = map(lambda x: word_to_id[x], stmt)
+    question[3] = map(lambda x: word_to_id[x], question[3])
     question[4] = word_to_id[question[4]]
     return question
 
