@@ -23,7 +23,7 @@ def inspect_outputs(i, node, fn):
 
 class WMemNN:
     def __init__(self, n_words, n_embedding=100, lr=0.01, momentum=0.9, word_to_id=None, null_word_id=-1):
-        self.regularization = 0.001
+        self.regularization = 0.000
         self.n_embedding = n_embedding
         self.lr = lr
         self.momentum = momentum
@@ -52,7 +52,7 @@ class WMemNN:
         rbatch = T.ivector('rb')
 
         # Question embedding
-        self.B = init_shared_normal(self.n_words, self.n_embedding, 0.1)
+        # self.B = init_shared_normal(self.n_words, self.n_embedding, 0.1)
 
         # Statement input, output embeddings
         # self.A1 = init_shared_normal(self.n_words, self.n_embedding, 0.01)
@@ -73,7 +73,7 @@ class WMemNN:
         self.weights = init_shared_normal_tensor(4, self.n_words, self.n_embedding, 0.1)
 
         # Final outut weight matrix
-        self.W = init_shared_normal(self.n_embedding, self.n_words, 0.1)
+        # self.W = init_shared_normal(self.n_embedding, self.n_words, 0.1)
 
         # Linear mapping between layers
         self.H = init_shared_normal(self.n_embedding, self.n_embedding, 0.1)
@@ -84,9 +84,9 @@ class WMemNN:
 
         params = [
             self.weights,
-            self.B,
-            self.W,
-            self.H,
+            # self.B,
+            # self.W,
+            self.H
         ]
 
         regularization_cost = reduce(
@@ -178,7 +178,7 @@ class WMemNN:
         memories = T.stacklists(computed_memories).dimshuffle(1, 0, 2)
 
         # Embed question
-        u1 = T.sum(self.B[question], axis=0)
+        u1 = T.sum(self.weights[0][question], axis=0)
 
         # Layer 1
         p = T.nnet.softmax(T.dot(u1, memories[0].T))
@@ -195,7 +195,7 @@ class WMemNN:
         o3 = T.dot(p, memories[3])
 
         # Final
-        output = T.nnet.softmax(T.dot(o3 + u3, self.W))
+        output = T.nnet.softmax(T.dot(o3 + u3, self.weights[3].T))
 
         return output[0]
 
@@ -243,7 +243,7 @@ class WMemNN:
 
             print "Epoch %d: %f" % (epoch, np.mean(costs))
 
-    def predict(self, dataset, questions, max_words=20):
+    def predict(self, dataset, questions, max_words=20, print_errors=False):
         correct_answers = 0
         wrong_answers = 0
         pe_matrix = self._get_PE_matrix(max_words, self.n_embedding)
@@ -261,7 +261,7 @@ class WMemNN:
             if predicted == correct:
                 correct_answers += 1
             else:
-                if np.random.rand() < 0.02:
+                if print_errors and np.random.rand() < 0.02:
                     print 'Correct: %s (%d %.3f), Guess: %s (%d %.3f)' % (self.id_to_word[correct], correct, probs[correct], self.id_to_word[predicted], predicted, probs[predicted])
                 wrong_answers += 1
 
@@ -282,15 +282,15 @@ if __name__ == "__main__":
     if len(sys.argv) > 3:
         n_embedding = int(sys.argv[3])
     else:
-        n_embedding = 100
+        n_embedding = 20
 
     mode = 'babi' # babi or wiki
 
     if '.pickle' in train_file:
         mode = 'wiki'
 
-    max_stmts = 10
-    max_words = 10
+    max_stmts = 20
+    max_words = 20
 
     # if mode == 'babi':
     train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
@@ -313,8 +313,8 @@ if __name__ == "__main__":
     #     num_words = 12
     #     word_to_id = {}
 
-    # print "Dataset has %d words" % num_words
-    print train_questions[0]
+    print "Dataset has %d words" % num_words
+    # print train_questions[0]
     wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id, null_word_id=null_word_id)
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
