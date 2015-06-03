@@ -142,12 +142,12 @@ class WMemNN:
         return memories
 
     def _get_PE_matrix(self, num_words, embedding_size):
-        pe_matrix = np.zeros((num_words, 4, embedding_size), theano.config.floatX)
-        for j in range(num_words):
-            for k in range(embedding_size):
-                value = (1 - float(j+1)/num_words) - (float(k+1)/embedding_size) * (1 - 2*float(j+1)/num_words)
-                for i in range(4):
-                    pe_matrix[j,i,k] = value
+        pe_matrix = np.ones((num_words, 4, embedding_size), theano.config.floatX)
+        # for j in range(num_words):
+        #     for k in range(embedding_size):
+        #         value = (1 - float(j+1)/num_words) - (float(k+1)/embedding_size) * (1 - 2*float(j+1)/num_words)
+        #         for i in range(4):
+        #             pe_matrix[j,i,k] = value
         return pe_matrix
 
     def memnn_batch_cost(self, statements_batch, question_batch, r_batch, pe_matrix):
@@ -156,7 +156,7 @@ class WMemNN:
                            outputs_info=T.as_tensor_variable(np.asarray(0, theano.config.floatX)),
                            non_sequences=[statements_batch, question_batch, r_batch, pe_matrix],
                            sequences=[theano.tensor.arange(l, dtype='int64')])
-        return s[-1] / l
+        return s[-1]
 
     def memnn_cost(self, statements, question, pe_matrix):
         # statements: list of list of word indices
@@ -261,7 +261,8 @@ class WMemNN:
             if predicted == correct:
                 correct_answers += 1
             else:
-                #print 'Correct: %s (%d %.3f), Guess: %s (%d %.3f)' % (self.id_to_word[correct], correct, probs[correct], self.id_to_word[predicted], predicted, probs[predicted])
+                if np.random.rand() < 0.02:
+                    print 'Correct: %s (%d %.3f), Guess: %s (%d %.3f)' % (self.id_to_word[correct], correct, probs[correct], self.id_to_word[predicted], predicted, probs[predicted])
                 wrong_answers += 1
 
             if len(questions) > 1000:
@@ -288,8 +289,8 @@ if __name__ == "__main__":
     if '.pickle' in train_file:
         mode = 'wiki'
 
-    max_stmts = 50
-    max_words = 50
+    max_stmts = 10
+    max_words = 10
 
     # if mode == 'babi':
     train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_dataset_weak(train_file, max_stmts=max_stmts, max_words=max_words)
@@ -313,6 +314,7 @@ if __name__ == "__main__":
     #     word_to_id = {}
 
     # print "Dataset has %d words" % num_words
+    print train_questions[0]
     wmemNN = WMemNN(n_words=num_words, n_embedding=100, lr=0.01, word_to_id=word_to_id, null_word_id=null_word_id)
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, n_epochs=n_epochs, lr_schedule=dict([(0, 0.02), (20, 0.01), (50, 0.005), (80, 0.002)]))
     #memNN.train(train_dataset_seq, train_dataset_bow, train_questions, lr_schedule=dict([(0, 0.01), (15, 0.009), (30, 0.007), (50, 0.005), (60, 0.003), (85, 0.001)]))
