@@ -50,6 +50,7 @@ def transform_ques_weak(question, word_to_id, num_words):
         indices.append(index_stmt)
     question[2] = indices
     question[3] = map(lambda x: word_to_id[x], question[3])
+    question[5] = map(lambda l: map(lambda x: word_to_id[x], l), question[5])
     return question
 
 def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}, update_word_ids=True, max_stmts=20, max_words=20, pad=True):
@@ -154,10 +155,11 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                         skip = True
                         break
                     else:
-                        option_word_ids.append(word_to_id[w])
+                        option_word_ids.append(w)
                 if skip:
                     break
                 else:
+                    option_word_ids = pad_statement(option_word_ids, null_word, max_words)
                     options_word_ids.append(option_word_ids)
 
             if skip:
@@ -165,7 +167,7 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                 continue
 
             article_no = len(questions)
-            questions.append([article_no, -1, statements, q_words, correct, option_word_ids])
+            questions.append([article_no, -1, statements, q_words, correct, options_word_ids])
 
     print "There are %d questions" % len(questions)
     print "There are %d statements" % len(dataset)
@@ -203,14 +205,14 @@ if __name__ == "__main__":
     test_questions += test2_questions
 
     # Pickle!!!!
-    print("Pickling train...")
     train_pickle = train_file.replace('tsv', 'pickle')
+    print("Pickling train... " + train_pickle)
     f = file(data_dir + '/' + train_pickle, 'wb')
     cPickle.dump((train_dataset, train_questions, word_to_id, num_words, null_word_id), f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()
 
-    print("Pickling test...")
     test_pickle = test_file.replace('tsv', 'pickle')
+    print("Pickling test... " + test_pickle)
     f = file(data_dir + '/' + test_pickle, 'wb')
     cPickle.dump((test_dataset, test_questions, word_to_id, num_words, null_word_id), f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()

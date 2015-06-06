@@ -179,9 +179,9 @@ class WMemNN:
 
     def memnn_batch_cost(self, statements_batch, question_batch, r_batch, ans_batch, pe_matrix):
         l = statements_batch.shape[0]
-        s, _ = theano.scan(fn=lambda i, c, xb, qb, rb, ab, pe: c - T.log(self.memnn_cost(xb[i], qb[i], pe)[rb[i]]),
+        s, _ = theano.scan(fn=lambda i, c, xb, qb, rb, ab, pe: c - T.log(self.memnn_cost(xb[i], qb[i], ab[i], pe)[rb[i]]),
                            outputs_info=T.as_tensor_variable(np.asarray(0, theano.config.floatX)),
-                           non_sequences=[statements_batch, question_batch, r_batch, pe_matrix],
+                           non_sequences=[statements_batch, question_batch, r_batch, ans_batch, pe_matrix],
                            sequences=[theano.tensor.arange(l, dtype='int64')])
         return s[-1]
 
@@ -230,7 +230,7 @@ class WMemNN:
         a3 = T.sum(self.A[ans[2]], axis=0)
         a4 = T.sum(self.A[ans[3]], axis=0)
         a = T.stack(a1, a2, a3, a4)
-        scores = T.dot(T.dot(a, self.U.T), T.dot(self.U, u4))
+        scores = T.dot(T.dot(u4, self.U.T), T.dot(self.U, a.T))
         output = T.nnet.softmax(scores)
 
         return output[0]
