@@ -307,8 +307,8 @@ class WMemNN:
                     print 'Correct: %s (%d %.3f), Guess: %s (%d %.3f)' % (correct_words, correct, probs[correct], predicted_words, predicted, probs[predicted])
                 wrong_answers += 1
 
-            if len(questions) > 1000:
-                print '(%d/%d) %d correct, %d wrong' % (i+1, len(questions), correct_answers, wrong_answers)
+            #if len(questions) > 1000:
+            #    print '(%d/%d) %d correct, %d wrong' % (i+1, len(questions), correct_answers, wrong_answers)
 
         print '%d correct, %d wrong' % (correct_answers, wrong_answers)
 
