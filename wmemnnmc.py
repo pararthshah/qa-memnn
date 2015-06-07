@@ -22,7 +22,7 @@ class WMemNN:
         if load_from_file:
             self.load_model(load_from_file)
         else:
-            self.regularization = 0.01
+            self.regularization = 0.000
             self.n_embedding = n_embedding
             self.lr = lr
             self.momentum = momentum
@@ -99,7 +99,7 @@ class WMemNN:
         l_rate = T.scalar('l_rate')
 
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=l_rate, method='adagrad', momentum=0.9,
+        updates = get_param_updates(params, grads, lr=l_rate, method='momentum', momentum=0.9,
             constraint=self._constrain_embedding(self.null_word_id, zero_vector))
 
         self.train_function = theano.function(
@@ -222,7 +222,7 @@ class WMemNN:
         o3 = T.dot(p, memories[3])
 
         # Score answers
-        u4 = u3 + o3
+        u4 = o3 + T.dot(u3, self.H)
 
         # Embed answer
         a1 = T.sum(self.A[ans[0]], axis=0)
@@ -231,6 +231,7 @@ class WMemNN:
         a4 = T.sum(self.A[ans[3]], axis=0)
         a = T.stack(a1, a2, a3, a4)
         scores = T.dot(T.dot(u4, self.U.T), T.dot(self.U, a.T))
+        #scores = T.dot(T.dot(u4, self.U.T), T.dot(self.U, a.T))
         output = T.nnet.softmax(scores)
 
         return output[0]
