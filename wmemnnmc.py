@@ -22,7 +22,7 @@ class WMemNN:
         if load_from_file:
             self.load_model(load_from_file)
         else:
-            self.regularization = 0.000
+            self.regularization = 0.01
             self.n_embedding = n_embedding
             self.lr = lr
             self.momentum = momentum
@@ -99,7 +99,7 @@ class WMemNN:
         l_rate = T.scalar('l_rate')
 
         # Parameter updates
-        updates = get_param_updates(params, grads, lr=l_rate, method='momentum', momentum=0.9,
+        updates = get_param_updates(params, grads, lr=l_rate, method='adagrad', momentum=0.9,
             constraint=self._constrain_embedding(self.null_word_id, zero_vector))
 
         self.train_function = theano.function(
@@ -363,10 +363,4 @@ if __name__ == "__main__":
         wmemNN = WMemNN(load_from_file=model_file)
         wmemNN.predict(train_dataset, train_questions, max_words)
         wmemNN.predict(test_dataset, test_questions, max_words)
-
-    # T1: Momentum + reg
-    # T2: Adagrad + reg
-    # T3: Adagrad
-    # T4: Momentum
-
 
