@@ -364,4 +364,9 @@ if __name__ == "__main__":
         wmemNN.predict(train_dataset, train_questions, max_words)
         wmemNN.predict(test_dataset, test_questions, max_words)
 
+    # T1: Momentum + reg
+    # T2: Adagrad + reg
+    # T3: Adagrad
+    # T4: Momentum
+
 

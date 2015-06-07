@@ -159,6 +159,10 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                 if skip:
                     break
                 else:
+                    if len(option_word_ids) > 1:
+                        skip = True
+                        more_than_1_word_answers += 1
+                        break
                     option_word_ids = pad_statement(option_word_ids, null_word, max_words)
                     options_word_ids.append(option_word_ids)
 
