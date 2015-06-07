@@ -47,7 +47,7 @@ def prune_statements(dataset, questions):
         questions[i][2] = new_statements + [q]
         total_old += len(old_statements)
         total_new += len(new_statements)
-        print("Question: ", questions[i][2][-1] if len(new_statements) > 1 else [], " before %d after %d" % (len(old_statements), len(new_statements)))
+        #print("Question: ", questions[i][2][-1] if len(new_statements) > 1 else [], " before %d after %d" % (len(old_statements), len(new_statements)))
 
     print("Before %d After %d" % (total_old, total_new))
     return questions

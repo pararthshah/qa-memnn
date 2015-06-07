@@ -6,6 +6,8 @@ from theano_util import (
     pad_statement,
 )
 
+from pos_pruning import prune_statements
+
 def only_words(line):
     ps = re.sub(r'[^a-zA-Z0-9]', r' ', line)
     ws = re.sub(r'(\W)', r' \1 ', ps) # Put spaces around punctuations
@@ -184,6 +186,14 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
     print "Ignored %d questions which had more than 1 word answers" % more_than_1_word_answers
     print "Ignored %d questions which had an unknown answer word" % answer_word_unknown
 
+    # ADD PRUNING HERE, BUT WE NEED TO PAD THE STATEMENTS AFTER
+    #print("Trying to prune extraneaous statements...")
+    #questions = prune_statements(dataset, questions)
+    #before_prune = len(questions)
+    #questions = filter(lambda x: len(x[2]) > 1, questions)
+    #after_prune = len(questions)
+    #print("Pruning invalidated %d questions", (before_prune - after_prune))
+
     print("Final processing...")
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
     return dataset, questions_seq, word_to_id, word_id, null_word_id
@@ -194,7 +204,7 @@ if __name__ == "__main__":
     ADD_PADDING = True
     # Consider padding from the other side
 
-    train_file = 'mc500.train.tsv'
+    train_file = 'mc160.train.tsv'
     train_answers = train_file.replace('tsv', 'ans')
 
     test_file = train_file.replace('train', 'test')
