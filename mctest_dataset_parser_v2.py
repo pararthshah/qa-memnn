@@ -128,6 +128,11 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                 only_words(question_pieces[q_index + 4]),
             ]
             correct = get_answer_index(answer_pieces[j])
+            answer = options[correct]
+
+            if len(answer) > 1:
+                more_than_1_word_answers += 1
+                continue
 
             if update_word_ids:
                 for token in q_words:
@@ -159,10 +164,10 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                 if skip:
                     break
                 else:
-                    if len(option_word_ids) > 1:
-                        skip = True
-                        more_than_1_word_answers += 1
-                        break
+                    #if len(option_word_ids) > 1:
+                    #    skip = True
+                    #    more_than_1_word_answers += 1
+                    #    break
                     option_word_ids = pad_statement(option_word_ids, null_word, max_words)
                     options_word_ids.append(option_word_ids)
 
