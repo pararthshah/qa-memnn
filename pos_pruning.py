@@ -26,17 +26,17 @@ def get_noun_set(article, tokens):
 
 get_noun_set = memoizefirst(get_noun_set)
 
-def prune_statements(dataset, questions):
+def prune_statements(dataset, questions, debug=True):
     total_old = 0
     total_new = 0
 
     for i in range(len(questions)):
         question = questions[i]
         new_statements = []
-        old_statements = question[2][:-1]
+        old_statements = question[2]
 
         # Keep only statements which have at least 1 common noun
-        q = question[2][-1]
+        q = question[3]
         q_nouns = get_noun_set('|'.join(q), q)
 
         for s in old_statements:
@@ -44,10 +44,12 @@ def prune_statements(dataset, questions):
             if len(s_nouns.intersection(q_nouns)) > 0:
                 new_statements.append(s)
 
-        questions[i][2] = new_statements + [q]
+        questions[i][2] = new_statements
         total_old += len(old_statements)
         total_new += len(new_statements)
-        #print("Question: ", questions[i][2][-1] if len(new_statements) > 1 else [], " before %d after %d" % (len(old_statements), len(new_statements)))
 
-    print("Before %d After %d" % (total_old, total_new))
+        if debug and i < 3:
+            print "Question: ", q, "Statements:\n", old_statements, "\n", new_statements, "\nbefore %d after %d" % (len(old_statements), len(new_statements))
+
+    #print("Before %d After %d" % (total_old, total_new))
     return questions

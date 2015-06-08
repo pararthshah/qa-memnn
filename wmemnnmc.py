@@ -18,7 +18,7 @@ import cPickle
 class WMemNN:
     def __init__(self, n_words=20, n_embedding=100, lr=0.01,
                  momentum=0.9, word_to_id=None, null_word_id=-1,
-                 max_stmts=20, max_words=20, load_from_file=None):
+                 load_from_file=None):
         if load_from_file:
             self.load_model(load_from_file)
         else:
@@ -28,8 +28,6 @@ class WMemNN:
             self.momentum = momentum
             self.n_words = n_words
             self.batch_size = 4
-            self.max_stmts = max_stmts
-            self.max_words = max_words
 
             self.word_to_id = word_to_id
             self.id_to_word = dict((v, k) for k, v in word_to_id.iteritems())
@@ -153,7 +151,7 @@ class WMemNN:
         for obj in [self.regularization, self.n_embedding, self.lr,
                     self.momentum, self.n_words, self.batch_size,
                     self.word_to_id, self.id_to_word, self.null_word_id,
-                    self.max_stmts, self.max_words, self.weights, self.H, self.A, self.U]:
+                    self.weights, self.H, self.A, self.U]:
             cPickle.dump(obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
         f.close()
 
@@ -168,8 +166,6 @@ class WMemNN:
         self.word_to_id = cPickle.load(f)
         self.id_to_word = cPickle.load(f)
         self.null_word_id = cPickle.load(f)
-        self.max_stmts = cPickle.load(f)
-        self.max_words = cPickle.load(f)
         self.weights = cPickle.load(f)
         self.H = cPickle.load(f)
         self.A = cPickle.load(f)
@@ -260,6 +256,8 @@ class WMemNN:
                 for index in batch_ids:
                     questions_batch.append(questions[index])
 
+                #pprint.pprint(questions_batch)
+
                 # (batch_size * max_stmts * max_words)
                 statements_seq_batch = np.asarray(map(lambda x: x[2], questions_batch), theano.config.floatX)
                 # (batch_size * max_words)
@@ -327,18 +325,15 @@ if __name__ == "__main__":
     else:
         n_embedding = 20
 
-    max_stmts = 20
-    max_words = 20
-
     print("Loading pickled train dataset")
     f = file(train_file, 'rb')
     obj = cPickle.load(f)
-    train_dataset, train_questions, word_to_id, num_words, null_word_id = obj
+    train_dataset, train_questions, word_to_id, num_words, null_word_id, train_max_stmts, train_max_words = obj
 
     print("Loading pickled test dataset")
     f = file(test_file, 'rb')
     obj = cPickle.load(f)
-    test_dataset, test_questions, _, _, _ = obj
+    test_dataset, test_questions, _, _, _, test_max_stmts, test_max_words = obj
 
     print "Dataset has %d words" % num_words
 
@@ -347,21 +342,20 @@ if __name__ == "__main__":
     save_my_model = True
 
     if train_my_model:
-        wmemNN = WMemNN(n_words=num_words, n_embedding=n_embedding, lr=0.01, word_to_id=word_to_id, null_word_id=null_word_id,
-                        max_stmts=max_stmts, max_words=max_words)
+        wmemNN = WMemNN(n_words=num_words, n_embedding=n_embedding, lr=0.01, word_to_id=word_to_id, null_word_id=null_word_id)
 
         lr_schedule = dict([(0, 0.01), (25, 0.01/2), (50, 0.01/4), (75, 0.01/8)])
 
         for i in xrange(n_epochs/5):
-            wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, max_words)
-            wmemNN.predict(train_dataset, train_questions, max_words)
-            wmemNN.predict(test_dataset, test_questions, max_words)
+            wmemNN.train(train_dataset, train_questions, 5, lr_schedule, 5*i, train_max_words)
+            wmemNN.predict(train_dataset, train_questions, train_max_words)
+            wmemNN.predict(test_dataset, test_questions, test_max_words)
 
         if save_my_model:
             print "Saving model to", model_file
             wmemNN.save_model(model_file)
     else:
         wmemNN = WMemNN(load_from_file=model_file)
-        wmemNN.predict(train_dataset, train_questions, max_words)
-        wmemNN.predict(test_dataset, test_questions, max_words)
+        wmemNN.predict(train_dataset, train_questions, train_max_words)
+        wmemNN.predict(test_dataset, test_questions, test_max_words)
 
