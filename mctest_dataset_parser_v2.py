@@ -231,7 +231,13 @@ if __name__ == "__main__":
     ADD_PRUNING = False
     # Consider padding from the other side
 
-    train_file = 'mc160.train.tsv'
+    if len(sys.argv) > 2:
+        dataset = sys.argv[2]
+    else:
+        dataset = 'mc160'
+
+    train_file = dataset + '.train.tsv'
+    print "Train file:", train_file
 
     train_answers = train_file.replace('tsv', 'ans')
 

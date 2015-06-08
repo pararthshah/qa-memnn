@@ -309,7 +309,8 @@ class WMemNN:
             #if len(questions) > 1000:
             #    print '(%d/%d) %d correct, %d wrong' % (i+1, len(questions), correct_answers, wrong_answers)
 
-        print '%d correct, %d wrong' % (correct_answers, wrong_answers)
+        accuracy = 100.0 * float(correct_answers) / (correct_answers + wrong_answers)
+        print '%d correct, %d wrong, %.2f%% acc' % (correct_answers, wrong_answers, accuracy)
 
 if __name__ == "__main__":
     train_file = sys.argv[1]
