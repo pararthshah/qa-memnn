@@ -9,8 +9,9 @@ from theano_util import (
 from pos_pruning import prune_statements
 
 def only_words(line):
-    ps = re.sub(r'[^a-zA-Z0-9]', r' ', line)
+    ps = re.sub(r'[^a-zA-Z0-9\']', r' ', line)
     ws = re.sub(r'(\W)', r' \1 ', ps) # Put spaces around punctuations
+    ws = re.sub(r" ' ", r"'", ws) # Remove spaces around '
     ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
     hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
     rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
@@ -18,8 +19,9 @@ def only_words(line):
     return rs
 
 def clean_sentence(line):
-    ps = re.sub(r'[^a-zA-Z0-9\.\?\!]', ' ', line) # Split on punctuations and hex characters
+    ps = re.sub(r'[^a-zA-Z0-9\.\?\!\']', ' ', line) # Split on punctuations and hex characters
     ws = re.sub(r'(\W)', r' \1 ', ps) # Put spaces around punctuations
+    ws = re.sub(r" ' ", r"'", ws) # Remove spaces around '
     ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
     hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
     rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
@@ -27,9 +29,10 @@ def clean_sentence(line):
     return rs
 
 def get_sentences(line):
-    ps = re.sub(r'[^a-zA-Z0-9\.\?\!]', ' ', line) # Split on punctuations and hex characters
+    ps = re.sub(r'[^a-zA-Z0-9\.\?\!\']', ' ', line) # Split on punctuations and hex characters
     s = re.sub(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s', '\t', ps) # Split on sentences
     ws = re.sub(r'(\W)', r' \1 ', s) # Put spaces around punctuations
+    ws = re.sub(r" ' ", r"'", ws) # Remove spaces around '
     ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
     hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
     rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
@@ -55,7 +58,7 @@ def transform_ques_weak(question, word_to_id, num_words):
     question[5] = map(lambda l: map(lambda x: word_to_id[x], l), question[5])
     return question
 
-def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}, update_word_ids=True, max_stmts=20, max_words=20, pad=True):
+def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}, update_word_ids=True, pad=True, add_pruning=False):
     dataset = []
     questions = []
 
@@ -108,14 +111,8 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
             else:
                 tokens = filter(lambda x: x in word_to_id, tokens)
 
-            if pad:
-                tokens = pad_statement(tokens, null_word, max_words)
-
             statements.append(tokens)
             dataset.append(tokens)
-
-        if pad:
-            statements = pad_memories(statements, null_word, max_stmts, max_words)
 
         # 4 questions
         for j in range(4):
@@ -149,8 +146,8 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
             else:
                 q_words = filter(lambda x: x in word_to_id, q_words)
 
-            if pad:
-                q_words = pad_statement(q_words, null_word, max_words)
+            if q_words[0] == 'multiple' or q_words[0] == 'one':
+                del q_words[0]
 
             # Ignore questions with unknown words in the answer
             options_word_ids = []
@@ -170,7 +167,6 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                     #    skip = True
                     #    more_than_1_word_answers += 1
                     #    break
-                    option_word_ids = pad_statement(option_word_ids, null_word, max_words)
                     options_word_ids.append(option_word_ids)
 
             if skip:
@@ -186,25 +182,57 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
     print "Ignored %d questions which had more than 1 word answers" % more_than_1_word_answers
     print "Ignored %d questions which had an unknown answer word" % answer_word_unknown
 
-    # ADD PRUNING HERE, BUT WE NEED TO PAD THE STATEMENTS AFTER
-    #print("Trying to prune extraneaous statements...")
-    #questions = prune_statements(dataset, questions)
-    #before_prune = len(questions)
-    #questions = filter(lambda x: len(x[2]) > 1, questions)
-    #after_prune = len(questions)
-    #print("Pruning invalidated %d questions", (before_prune - after_prune))
+    if add_pruning:
+        print("Trying to prune extraneaous statements...")
+        questions = prune_statements(dataset, questions)
+        before_prune = len(questions)
+        questions = filter(lambda x: len(x[2]) > 1, questions)
+        after_prune = len(questions)
+        print("Pruning invalidated %d questions" % (before_prune - after_prune))
+
+    max_stmts = None
+    max_words = None
+    if pad:
+        s_lens = []
+        q_lens = []
+        for i in xrange(len(questions)):
+            q = questions[i]
+            s_lens.append(len(q[2]))
+            for j in xrange(len(q[2])):
+                q_lens.append(len(q[2][j]))
+
+        max_stmts = max(s_lens)
+        max_words = max(q_lens)
+        print "Max statement length: ", max_words
+        print "Max number of statements: ", max_stmts
+
+        for i in xrange(len(questions)):
+            q = questions[i]
+            # Statements
+
+            for j in xrange(len(q[2])):
+                q[2][j] = pad_statement(q[2][j], null_word, max_words)
+
+            q[2] = pad_memories(q[2], null_word, max_stmts, max_words)
+            q[3] = pad_statement(q[3], null_word, max_words)
+
+            for j in xrange(len(q[5])):
+                q[5][j] = pad_statement(q[5][j], null_word, max_words)
+
 
     print("Final processing...")
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
-    return dataset, questions_seq, word_to_id, word_id, null_word_id
+    return dataset, questions_seq, word_to_id, word_id, null_word_id, max_stmts, max_words
 
 import cPickle
 
 if __name__ == "__main__":
     ADD_PADDING = True
+    ADD_PRUNING = False
     # Consider padding from the other side
 
     train_file = 'mc160.train.tsv'
+
     train_answers = train_file.replace('tsv', 'ans')
 
     test_file = train_file.replace('train', 'test')
@@ -212,26 +240,28 @@ if __name__ == "__main__":
 
     data_dir = sys.argv[1]
 
-    train_dataset, train_questions, word_to_id, num_words, null_word_id = parse_mc_test_dataset(data_dir + '/' + train_file, data_dir + '/' + train_answers, pad=ADD_PADDING)
-    test_dataset, test_questions, word_to_id, num_words, null_word_id = parse_mc_test_dataset(data_dir + '/' + test_file, data_dir + '/' + test_answers, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, pad=ADD_PADDING)
+    train_obj = parse_mc_test_dataset(data_dir + '/' + train_file, data_dir + '/' + train_answers, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
+    num_words = train_obj[3]
+    word_to_id = train_obj[2]
+    test_obj = parse_mc_test_dataset(data_dir + '/' + test_file, data_dir + '/' + test_answers, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
 
     # Add dev to test
     test2_file = train_file.replace('train', 'dev')
     test2_answers = test2_file.replace('tsv', 'ans')
-    test2_dataset, test2_questions, word_to_id, num_words, null_word_id = parse_mc_test_dataset(data_dir + '/' + test2_file, data_dir + '/' + test2_answers, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, pad=ADD_PADDING)
+    test2_obj = parse_mc_test_dataset(data_dir + '/' + test2_file, data_dir + '/' + test2_answers, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
 
-    test_dataset += test2_dataset
-    test_questions += test2_questions
+    #test_obj[0] += test2_obj[0]
+    #test_obj[1] += test2_obj[1]
 
     # Pickle!!!!
     train_pickle = train_file.replace('tsv', 'pickle')
     print("Pickling train... " + train_pickle)
     f = file(data_dir + '/' + train_pickle, 'wb')
-    cPickle.dump((train_dataset, train_questions, word_to_id, num_words, null_word_id), f, protocol=cPickle.HIGHEST_PROTOCOL)
+    cPickle.dump(train_obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()
 
     test_pickle = test_file.replace('tsv', 'pickle')
     print("Pickling test... " + test_pickle)
     f = file(data_dir + '/' + test_pickle, 'wb')
-    cPickle.dump((test_dataset, test_questions, word_to_id, num_words, null_word_id), f, protocol=cPickle.HIGHEST_PROTOCOL)
+    cPickle.dump(test_obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()
