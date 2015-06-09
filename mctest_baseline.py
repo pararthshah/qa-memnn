@@ -1,7 +1,7 @@
 import numpy as np
 import sys, random, pprint
 import cPickle
-import math
+import math, os
 
 class MCTestBaseline:
     def __init__(self, n_words=20, word_to_id=None, null_word_id=-1):
@@ -46,8 +46,8 @@ class MCTestBaseline:
                     sw_score = curr_score
 
             d_score = -1
-            S_Q = (ques_set & stmt_set) # - stop_words
-            S_A = (ans_set[i] & stmt_set)
+            S_Q = (ques_set & stmt_set) - stop_words
+            S_A = (ans_set[i] & stmt_set) - stop_words
             if len(S_Q) == 0 or len(S_A) == 0:
                 d_score = 1
             else:
@@ -113,19 +113,28 @@ class MCTestBaseline:
 if __name__ == "__main__":
     train_file = sys.argv[1]
     test_file = train_file.replace('train', 'test')
+    stop_file = os.path.join(os.path.dirname(train_file), 'stopwords.pickle')
 
     print("Loading pickled train dataset")
     f = file(train_file, 'rb')
     obj = cPickle.load(f)
     train_dataset, train_questions, word_to_id, num_words, null_word_id, train_max_stmts, train_max_words = obj
+    f.close()
 
     print("Loading pickled test dataset")
     f = file(test_file, 'rb')
     obj = cPickle.load(f)
     test_dataset, test_questions, _, _, _, test_max_stmts, test_max_words = obj
+    f.close()
+
+    print("Loading pickled stop words")
+    f = file(stop_file, 'rb')
+    obj = cPickle.load(f)
+    stop_words = obj
+    f.close()
 
     print "Dataset has %d words" % num_words
 
     baseline = MCTestBaseline(n_words=num_words, word_to_id=word_to_id, null_word_id=null_word_id)
-    baseline.predict(train_dataset, train_questions, train_max_words)
-    baseline.predict(test_dataset, test_questions, test_max_words)
+    baseline.predict(train_dataset, train_questions, stop_words, train_max_words)
+    baseline.predict(test_dataset, test_questions, stop_words, test_max_words)

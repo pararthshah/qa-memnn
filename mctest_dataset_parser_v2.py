@@ -1,5 +1,6 @@
 import re
-import sys
+import sys, os
+import cPickle
 
 from theano_util import (
     pad_memories,
@@ -12,8 +13,8 @@ def only_words(line):
     ps = re.sub(r'[^a-zA-Z0-9\']', r' ', line)
     ws = re.sub(r'(\W)', r' \1 ', ps) # Put spaces around punctuations
     ws = re.sub(r" ' ", r"'", ws) # Remove spaces around '
-    ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
-    hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
+    # ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
+    hs = re.sub(r'-', r' ', ws) # Replace hyphens with space
     rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
     rs = rs.lower().strip().split(' ')
     return rs
@@ -22,8 +23,8 @@ def clean_sentence(line):
     ps = re.sub(r'[^a-zA-Z0-9\.\?\!\']', ' ', line) # Split on punctuations and hex characters
     ws = re.sub(r'(\W)', r' \1 ', ps) # Put spaces around punctuations
     ws = re.sub(r" ' ", r"'", ws) # Remove spaces around '
-    ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
-    hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
+    # ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
+    hs = re.sub(r'-', r' ', ws) # Replace hyphens with space
     rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
     rs = rs.lower().strip()
     return rs
@@ -33,8 +34,8 @@ def get_sentences(line):
     s = re.sub(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s', '\t', ps) # Split on sentences
     ws = re.sub(r'(\W)', r' \1 ', s) # Put spaces around punctuations
     ws = re.sub(r" ' ", r"'", ws) # Remove spaces around '
-    ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
-    hs = re.sub(r'-', r' ', ns) # Replace hyphens with space
+    # ns = re.sub(r'(\d+)', r' <number> ', ws) # Put spaces around numbers
+    hs = re.sub(r'-', r' ', ws) # Replace hyphens with space
     rs = re.sub(r' +', r' ', hs) # Reduce multiple spaces into 1
     rs = rs.lower().strip()
     return rs.split('\t')
@@ -129,9 +130,9 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
             correct = get_answer_index(answer_pieces[j])
             answer = options[correct]
 
-            if len(answer) > 1:
-                more_than_1_word_answers += 1
-                continue
+            # if len(answer) > 1:
+            #     more_than_1_word_answers += 1
+            #     continue
 
             if update_word_ids:
                 for token in q_words:
@@ -156,8 +157,13 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
                 option_word_ids = []
                 for w in o:
                     if w not in word_to_id:
-                        skip = True
-                        break
+                        if update_word_ids:
+                            word_to_id[w] = word_id
+                            word_id += 1
+                            option_word_ids.append(w)
+                        else:
+                            skip = True
+                            break
                     else:
                         option_word_ids.append(w)
                 if skip:
@@ -224,7 +230,19 @@ def parse_mc_test_dataset(questions_file, answers_file, word_id=0, word_to_id={}
     questions_seq = map(lambda x: transform_ques_weak(x, word_to_id, word_id), questions)
     return dataset, questions_seq, word_to_id, word_id, null_word_id, max_stmts, max_words
 
-import cPickle
+def parse_stop_words(stop_file, word_id=0, word_to_id={}, update_word_ids=False):
+    stop_words = set()
+    with open(stop_file) as f:
+        for line in f:
+            token = line.strip()
+            if not token in word_to_id:
+                if update_word_ids:
+                    word_to_id[token] = word_id
+                    word_id += 1
+                else:
+                    continue
+            stop_words.add(word_to_id[token])
+    return stop_words
 
 if __name__ == "__main__":
     ADD_PADDING = True
@@ -246,28 +264,39 @@ if __name__ == "__main__":
 
     data_dir = sys.argv[1]
 
-    train_obj = parse_mc_test_dataset(data_dir + '/' + train_file, data_dir + '/' + train_answers, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
+    train_obj = parse_mc_test_dataset(os.path.join(data_dir, train_file), os.path.join(data_dir, train_answers), pad=ADD_PADDING, add_pruning=ADD_PRUNING)
     num_words = train_obj[3]
     word_to_id = train_obj[2]
-    test_obj = parse_mc_test_dataset(data_dir + '/' + test_file, data_dir + '/' + test_answers, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
+    test_obj = parse_mc_test_dataset(os.path.join(data_dir, test_file), os.path.join(data_dir, test_answers), word_id=num_words, word_to_id=word_to_id, update_word_ids=True, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
+    num_words = test_obj[3]
+    word_to_id = test_obj[2]
 
     # Add dev to test
-    test2_file = train_file.replace('train', 'dev')
-    test2_answers = test2_file.replace('tsv', 'ans')
-    test2_obj = parse_mc_test_dataset(data_dir + '/' + test2_file, data_dir + '/' + test2_answers, word_id=num_words, word_to_id=word_to_id, update_word_ids=False, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
+    # test2_file = train_file.replace('train', 'dev')
+    # test2_answers = test2_file.replace('tsv', 'ans')
+    # test2_obj = parse_mc_test_dataset(os.path.join(data_dir, test2_file), os.path.join(data_dir, test2_answers), word_id=num_words, word_to_id=word_to_id, update_word_ids=True, pad=ADD_PADDING, add_pruning=ADD_PRUNING)
 
     #test_obj[0] += test2_obj[0]
     #test_obj[1] += test2_obj[1]
 
+    stop_file = 'stopwords.txt'
+    stop_obj = parse_stop_words(os.path.join(data_dir, stop_file), word_id=num_words, word_to_id=word_to_id)
+
     # Pickle!!!!
     train_pickle = train_file.replace('tsv', 'pickle')
     print("Pickling train... " + train_pickle)
-    f = file(data_dir + '/' + train_pickle, 'wb')
+    f = file(os.path.join(data_dir, train_pickle), 'wb')
     cPickle.dump(train_obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()
 
     test_pickle = test_file.replace('tsv', 'pickle')
     print("Pickling test... " + test_pickle)
-    f = file(data_dir + '/' + test_pickle, 'wb')
+    f = file(os.path.join(data_dir, test_pickle), 'wb')
     cPickle.dump(test_obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
+    f.close()
+
+    stop_pickle = stop_file.replace('txt', 'pickle')
+    print("Pickling stop words... " + stop_pickle)
+    f = file(os.path.join(data_dir, stop_pickle), 'wb')
+    cPickle.dump(stop_obj, f, protocol=cPickle.HIGHEST_PROTOCOL)
     f.close()
